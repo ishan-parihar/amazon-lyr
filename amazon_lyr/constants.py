@@ -33,5 +33,6 @@ ACCEPT_LANGUAGE = "en-US,en;q=0.9"
 
 MAX_RETRIES = 3
 RETRY_BACKOFF = 1.5
-REQUEST_INTERVAL = 1.5  # seconds between requests — Amazon has no rate headers
+# Live probing showed sub-3s cadences get silent empty grids (soft throttle).
+REQUEST_INTERVAL = 3.0
 REQUEST_TIMEOUT = 30

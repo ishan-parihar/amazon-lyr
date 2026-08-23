@@ -21,7 +21,6 @@ def register_cart_tools(mcp: FastMCP) -> None:
         """Add a product to the Amazon shopping cart. quantity is clamped to 1-30."""
         try:
             _require_write_session()
-            quantity = max(1, min(quantity, 30))
             client = get_amazon_client()
             return await client.add_to_cart(asin, quantity=quantity)
         except Exception as e:

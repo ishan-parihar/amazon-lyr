@@ -105,3 +105,147 @@ async def test_cookies_set_on_session():
         assert jar_names["ubid-main"] == "123"
     finally:
         await client.close()
+
+
+# ── retry / transport / filter edge cases ─────────────────────────────────
+
+
+class AlwaysFails:
+    def __init__(self):
+        self.calls = 0
+
+    async def request(self, *a, **k):
+        self.calls += 1
+        raise ConnectionError("boom")
+
+    async def close(self):
+        pass
+
+
+async def test_retries_exhausted_then_wrapped(monkeypatch):
+    monkeypatch.setattr("amazon_lyr.scraping.api_client.RETRY_BACKOFF", 0)
+    from amazon_lyr.exceptions import AmazonError
+
+    fake = AlwaysFails()
+    client, _ = _client_with(monkeypatch, FakeResponse(""))
+    monkeypatch.setattr(client, "_get_session", _fake_session(fake))
+    with pytest.raises(AmazonError, match="after 3 attempts"):
+        await client.search_products("x")
+    assert fake.calls == 3
+
+
+def _fake_session(session):
+    async def _get():
+        return session
+
+    return _get
+
+
+async def test_404_raises_not_found(monkeypatch):
+    from amazon_lyr.exceptions import NotFoundError
+
+    class NotFound(Exception):
+        pass
+
+    resp = FakeResponse("<html></html>", status_code=404)
+    # _check_page inspects status_code directly.
+    client, _ = _client_with(monkeypatch, resp)
+
+    orig_check = client._check_page
+
+    def check(r):
+        if r.status_code == 404:
+            raise NotFoundError()
+        return orig_check(r)
+
+    monkeypatch.setattr(client, "_check_page", check)
+    with pytest.raises(NotFoundError):
+        await client.get_product("B0MISSING")
+
+
+async def test_signin_via_form_action_marker(monkeypatch):
+    html = '<html><body><form action="/ap/signin" method="post">login</form></body></html>'
+    resp = FakeResponse(html)
+    client, _ = _client_with(monkeypatch, resp)
+    with pytest.raises(SessionExpiredError):
+        await client.view_cart()
+
+
+async def test_automated_access_block_is_captcha(monkeypatch):
+    html = "<p>To discuss automated access to Amazon data please contact api-services-support@amazon.com</p>"
+    client, _ = _client_with(monkeypatch, FakeResponse(html))
+    with pytest.raises(CaptchaError):
+        await client.search_products("x")
+
+
+async def test_empty_body_returns_empty_string(monkeypatch):
+    client, _ = _client_with(monkeypatch, FakeResponse(""))
+    assert await client.get_html("/s", params={"k": "x"}) == ""
+
+
+async def test_get_product_hits_dp_path(monkeypatch):
+    ok = FakeResponse("<html><body></body></html>")
+    client, fake = _client_with(monkeypatch, ok)
+    await client.get_product("B08N5WRWNW")
+    assert "/dp/B08N5WRWNW" in fake.calls[0]["url"]
+
+
+async def test_post_form_sets_content_type(monkeypatch):
+    ok = FakeResponse('<div id="sc-empty-cart"></div>')
+    client, fake = _client_with(monkeypatch, ok)
+    await client.post_form("/gp/cart/view.html", data={"a": "b"})
+    assert fake.calls[0]["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+
+
+async def test_remove_from_cart_reports_uncertain_when_item_stays(monkeypatch):
+    cart_still_there = """
+    <div class="sc-list-item-content">
+      <input type="submit" name="submit.delete.K1" value="Delete">
+      <span class="sc-product-link">Still here</span>
+    </div>"""
+    client, fake = _client_with(monkeypatch, FakeResponse(cart_still_there))
+    result = await client.remove_from_cart("submit.delete.K1")
+    assert result["status"] == "uncertain"
+    assert fake.calls[0]["data"] == {"submit.delete.K1": "Delete"}
+
+
+async def test_quantity_clamping_in_client(monkeypatch):
+    ok = FakeResponse('<div id="sc-empty-cart"></div>')
+    for raw, expected in ((100, "30"), (0, "1"), (-5, "1"), (7, "7")):
+        client, fake = _client_with(monkeypatch, ok)
+        await client.add_to_cart("B0Q", quantity=raw)
+        assert fake.calls[0]["data"]["quantity.1"] == expected
+
+
+async def test_search_filter_params_independent(monkeypatch):
+    ok = FakeResponse("<html></html>")
+    client, fake = _client_with(monkeypatch, ok)
+    await client.search_products(
+        "ssd", price_min=50, price_max=200, min_rating=4, department="electronics"
+    )
+    params = fake.calls[0]["params"]
+    assert params["low-price"] == "50"
+    assert params["high-price"] == "200"
+    assert params["rh"] == "p_72:1254471011"
+    assert params["i"] == "electronics"
+    assert "rh" not in {k: v for k, v in params.items() if v == ""}  # no empty rh
+
+
+async def test_min_rating_out_of_map_is_ignored(monkeypatch):
+    ok = FakeResponse("<html></html>")
+    client, fake = _client_with(monkeypatch, ok)
+    await client.search_products("ssd", min_rating=5)
+    assert "rh" not in fake.calls[0]["params"]
+
+
+async def test_rate_limiter_enforces_interval():
+    import time
+
+    from amazon_lyr.ratelimit import RateLimiter
+
+    limiter = RateLimiter(min_interval=0.05)
+    await limiter.acquire()
+    start = time.monotonic()
+    await limiter.acquire()
+    elapsed = time.monotonic() - start
+    assert elapsed >= 0.03  # second call must wait out the interval

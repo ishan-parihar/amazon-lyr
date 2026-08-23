@@ -19,14 +19,24 @@ def get_cookies_path() -> Path:
 
 
 def load_cookies() -> dict[str, str]:
-    """Load cookies. Precedence: AMAZON_COOKIES env var > stored file."""
+    """Load cookies. Precedence: AMAZON_COOKIES env var > stored file.
+
+    Raises ValueError on malformed env input (fail loud, don't silently fall back).
+    """
     raw = os.getenv("AMAZON_COOKIES", "").strip()
     if raw:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
             # Not inline JSON — treat as a path to a JSON file.
-            data = json.loads(Path(raw).read_text())
+            try:
+                data = json.loads(Path(raw).read_text())
+            except FileNotFoundError:
+                raise ValueError(
+                    f"AMAZON_COOKIES is neither valid JSON nor an existing file: {raw!r}"
+                ) from None
+        if not isinstance(data, dict):
+            raise ValueError("AMAZON_COOKIES must be a JSON object mapping cookie names to values")
         return {str(k): str(v) for k, v in data.items()}
     path = get_cookies_path()
     if not path.exists():

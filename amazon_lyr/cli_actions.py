@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 from amazon_lyr import __version__
@@ -14,8 +15,18 @@ from amazon_lyr.session_state import clear_cookies, save_cookies
 # ── TOON helpers ──────────────────────────────────────────────────────────
 
 
+_NUMERIC_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
+
+
 def _quote(val: str) -> str:
-    if val in ("true", "false", "null") or any(c in val for c in ':,"[]{}#') or val != val.strip():
+    # Quote anything that could be misread as bool/number, contains special
+    # chars, or has padding — so a TOON roundtrip preserves the original type.
+    if (
+        val in ("true", "false", "null")
+        or any(c in val for c in ':,"[]{}#\n')
+        or val != val.strip()
+        or _NUMERIC_RE.fullmatch(val)
+    ):
         return '"' + val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
     return val
 
@@ -30,6 +41,16 @@ def _kv(key: str, val) -> str:  # noqa: ANN001
     return f"{key}: {_quote(str(val))}"
 
 
+def _cell(v) -> str:  # noqa: ANN001 - tabular cell honors original type
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return ""
+    if isinstance(v, (int, float)):
+        return str(v)
+    return _quote(str(v))
+
+
 def toon_object(fields: dict) -> str:
     lines = []
     for k, v in fields.items():
@@ -40,7 +61,7 @@ def toon_object(fields: dict) -> str:
             keys = list(v[0].keys())
             lines.append(f"{k}[{len(v)}]{{{','.join(keys)}}}:")
             for item in v:
-                lines.append("  " + ",".join(_quote(str(item.get(kk, ""))) for kk in keys))
+                lines.append("  " + ",".join(_cell(item.get(kk)) for kk in keys))
         elif isinstance(v, list):
             lines.append(f"{k}[{len(v)}]: " + ",".join(_quote(str(x)) for x in v))
         else:
@@ -121,9 +142,16 @@ async def run_command(args) -> None:  # noqa: ANN001, C901 - flat dispatch is fi
         if args.cookies_file:
             from pathlib import Path
 
-            cookies = {
-                str(k): str(v) for k, v in json.loads(Path(args.cookies_file).read_text()).items()
-            }
+            try:
+                data = json.loads(Path(args.cookies_file).read_text())
+                if not isinstance(data, dict):
+                    raise ValueError("cookies file must be a JSON object")
+                cookies = {str(k): str(v) for k, v in data.items()}
+            except (OSError, json.JSONDecodeError, ValueError) as e:
+                axi_error(
+                    f"Could not read cookies file {args.cookies_file!r}: {e}",
+                    hint='Export cookies as a JSON object like {"at-main": "..."}.',
+                )
         else:
             try:
                 cookies = import_from_browser(args.browser)
@@ -137,6 +165,9 @@ async def run_command(args) -> None:  # noqa: ANN001, C901 - flat dispatch is fi
                 "Imported cookies are missing at-main (the Amazon login token).",
                 hint="Log in to amazon.com in the selected browser first, then retry.",
             )
+        from amazon_lyr.dependencies import reset_client  # noqa: PLC0415
+
+        reset_client()  # drop any cached client built from stale cookies
         save_cookies(cookies)
         print(toon_object(get_auth_status()))
         return

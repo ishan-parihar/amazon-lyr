@@ -144,20 +144,15 @@ class AmazonClient:
             params["i"] = department
         if sort:
             params["s"] = sort  # e.g. price-asc-rank, price-desc-rank, review-rank, date-desc-rank
-        low_high = "&".join(
-            p
-            for p in (
-                f"low-price={price_min}" if price_min else "",
-                f"high-price={price_max}" if price_max else "",
-            )
-            if p
-        )
-        if low_high:
-            params["rh"] = f"p_36:{low_high}"
+        # Independent query params — Amazon supports low-price/high-price standalone.
+        if price_min is not None:
+            params["low-price"] = str(price_min)
+        if price_max is not None:
+            params["high-price"] = str(price_max)
         if min_rating:
-            base_rh = params.get("rh", "")
-            star_map = {4: "p72:1254471011", 3: "p72:1254477011"}
-            params["rh"] = f"{base_rh}&{star_map.get(min_rating, star_map[4])}"
+            star_map = {4: "p_72:1254471011", 3: "p_72:1254477011"}
+            if min_rating in star_map:
+                params["rh"] = star_map[min_rating]
         html = await self.get_html(SEARCH_PATH, params=params)
         return parse_search(html, page=page)
 
@@ -194,6 +189,8 @@ class AmazonClient:
     # ── writes (shopping) ────────────────────────────────────────────────
 
     async def add_to_cart(self, asin: str, quantity: int = 1) -> dict:
+        # Single source of truth for clamping — tools and CLI both route here.
+        quantity = max(1, min(int(quantity or 1), 30))
         data = {
             "ASIN.1": asin,
             "quantity.1": str(quantity),

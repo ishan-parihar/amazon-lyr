@@ -13,6 +13,38 @@ from bs4 import BeautifulSoup, Tag
 
 _PRICE_RE = re.compile(r"[\d,]+\.?\d*")
 _ORDER_ID_RE = re.compile(r"\d{3}-\d{7}-\d{7}")
+_THUMB_RE = re.compile(r"\._.*?_\.")  # matches ._AC_UY218_. etc. (multi-segment)
+_RATING_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:out of|/)\s*5\b")
+# Some geo/bot variants strip .a-price markup from the grid but leave the
+# amount as visible text. ponytail: heuristic scan; get_product is authoritative.
+_MONEY_RE = re.compile(r"(?:[$€£₹]|USD\s?|EUR\s?|GBP\s?|INR\s?)[0-9][0-9,\u00a0]*(?:\.[0-9]{2})?")
+
+
+_CURRENCY_RE = re.compile(r"^([^\d\s.,][^\s\d.,]*)")
+
+
+def _extract_currency(price_text: str | None) -> str | None:
+    if not price_text:
+        return None
+    match = _CURRENCY_RE.match(price_text.strip())
+    symbol = match.group(1) if match else None
+    # Only trust short symbols/codes ($, £, INR, USD); not stray words.
+    return symbol if symbol and len(symbol) <= 4 else None
+
+
+def _scan_price_text(node: Tag) -> str | None:
+    """Last-resort price extraction: first decimal-bearing money token in card text.
+
+    ponytail: trusts DOM order (live buy boxes render the sale price first);
+    coupon/list-price mispicks are possible — get_product remains authoritative.
+    """
+    best: str | None = None
+    for match in _MONEY_RE.finditer(node.get_text(" ", strip=True)):
+        token = match.group(0).strip()
+        if "." in token:
+            return token
+        best = best or token
+    return best
 
 
 def _soup(html: str) -> BeautifulSoup:
@@ -41,7 +73,7 @@ def _parse_price(text: str | None) -> float | None:
 def _rating_from_text(text: str | None) -> float | None:
     if not text:
         return None
-    match = re.search(r"(\d(?:\.\d)?)\s*(?:out of|/)\s*5", text)
+    match = _RATING_RE.search(text)
     return float(match.group(1)) if match else None
 
 
@@ -57,7 +89,7 @@ def parse_search(html: str, page: int = 1) -> dict:
             continue
         title = _text(card.select_one("h2 span"))
         price_node = card.select_one(".a-price .a-offscreen")
-        price = _text(price_node)
+        price = _text(price_node) or _scan_price_text(card)
         rating_text = _text(
             card.select_one("span.a-icon-alt") or card.select_one("i.a-icon-star-small")
         )
@@ -73,9 +105,7 @@ def parse_search(html: str, page: int = 1) -> dict:
                 "title": title,
                 "price": price,
                 "price_value": _parse_price(price),
-                "currency": price[:1]
-                if price and price[:1].isascii() and not price[:1].isdigit()
-                else None,
+                "currency": _extract_currency(price),
                 "rating": _rating_from_text(rating_text),
                 "ratings_count": ratings_count,
                 "sponsored": bool(
@@ -87,7 +117,19 @@ def parse_search(html: str, page: int = 1) -> dict:
             }
         )
     total_text = _text(soup.select_one('h2[class*="widget-header"] span, .s-breadcrumb span'))
-    return {"query_page": page, "total_results_text": total_text, "results": results}
+    # Amazon soft-throttles with silent empty grids — distinguish them from
+    # legit no-results pages so agents can retry instead of trusting the empty.
+    legit_no_results = bool(
+        soup.select_one(
+            'div.s-no-results-result, [data-component-type="s-no-result"], div.s-result-list .s-no-outline'
+        )
+    )
+    return {
+        "query_page": page,
+        "total_results_text": total_text,
+        "results": results,
+        "possibly_throttled": not results and not legit_no_results,
+    }
 
 
 # ── product page ─────────────────────────────────────────────────────────
@@ -118,14 +160,22 @@ def _product_details(soup: BeautifulSoup) -> dict:
 def parse_product(html: str, asin: str) -> dict:
     soup = _soup(html)
     title = _text(soup.select_one("#productTitle"))
-    price = _text(
-        soup.select_one(".a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-offscreen")
+    # Some geo variants render prices outside .a-price — scope-scan the buy box.
+    price_scope = soup.select_one("#apex_desktop") or soup.select_one("#centerCol") or soup
+    price_node = price_scope.select_one(".a-price .a-offscreen") or soup.select_one(
+        ".a-price .a-offscreen"
     )
+    price = _text(price_node) or _scan_price_text(price_scope)
     list_price = _text(soup.select_one(".basisPrice .a-offscreen, .a-text-price .a-offscreen"))
     rating_text = _text(
         soup.select_one("#acrPopover .a-icon-alt") or soup.select_one("#acrPopover")
     )
     ratings_count_text = _text(soup.select_one("#acrCustomerReviewText"))
+    reviews_count: int | None = None
+    if ratings_count_text:
+        count_match = re.search(r"[\d,]+", ratings_count_text)  # e.g. "(1,755)"
+        if count_match:
+            reviews_count = int(count_match.group().replace(",", ""))
 
     availability = _text(soup.select_one("#availability")) or _text(
         soup.select_one("#availabilityInsideBuyBox_feature_div")
@@ -137,7 +187,7 @@ def parse_product(html: str, asin: str) -> dict:
     for img in soup.select("#altImages img[src]")[:8]:
         src = str(img.get("src", ""))
         # Thumbnails are small; upscale the size segment.
-        images.append(re.sub(r"\._[^_]+_\.", "._AC_SL1000_.", src))
+        images.append(_THUMB_RE.sub("._AC_SL1000_.", src))
 
     return {
         "asin": asin,
@@ -149,9 +199,7 @@ def parse_product(html: str, asin: str) -> dict:
         "list_price": list_price,
         "list_price_value": _parse_price(list_price),
         "rating": _rating_from_text(rating_text),
-        "reviews_count": int(ratings_count_text.split()[0].replace(",", ""))
-        if ratings_count_text and ratings_count_text.split()[0].replace(",", "").isdigit()
-        else None,
+        "reviews_count": reviews_count,
         "availability": availability,
         "buybox_seller": seller,
         "features": _product_features(soup),
@@ -274,6 +322,18 @@ def parse_orders(html: str) -> dict:
                 ".delivery-box .yohtmlc-delivery-status, .shipment .js-shipment-status, [data-testid='primary-status']"
             )
         )
+        if status is None:
+            low = text_blob.lower()
+            for marker, label in (
+                ("delivered", "Delivered"),
+                ("shipped", "Shipped"),
+                ("cancelled", "Cancelled"),
+                ("pending", "Pending"),
+                ("return", "Returned"),
+            ):
+                if marker in low:
+                    status = label
+                    break
         orders.append(
             {
                 "order_id": order_id_match.group(0) if order_id_match else None,
@@ -281,14 +341,7 @@ def parse_orders(html: str) -> dict:
                 "placed_date": header_cols[0] if len(header_cols) > 0 else None,
                 "total": total,
                 "ship_to": header_cols[-1] if len(header_cols) > 2 else None,
-                "status": status
-                or (
-                    "Delivered"
-                    if "delivered" in text_blob.lower()
-                    else "Shipped"
-                    if "shipped" in text_blob.lower()
-                    else None
-                ),
+                "status": status,
                 "items": items[:5],
             }
         )
