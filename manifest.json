@@ -24,11 +24,18 @@
     { "name": "get_product", "description": "Full product details by ASIN" },
     { "name": "compare_products", "description": "Compare up to 5 ASINs side-by-side" },
     { "name": "get_reviews", "description": "Customer reviews with star filters" },
+    { "name": "review_insights", "description": "Aggregate review stats + keyword themes" },
+    { "name": "search_in_reviews", "description": "Keyword scan across review pages" },
     { "name": "add_to_cart", "description": "Add an item to the cart" },
     { "name": "view_cart", "description": "View cart contents" },
     { "name": "remove_from_cart", "description": "Remove a cart item" },
     { "name": "get_wishlist", "description": "List wishlist items" },
     { "name": "get_orders", "description": "Order history with statuses" },
+    { "name": "get_order_details", "description": "Full detail for one order" },
+    { "name": "track_shipment", "description": "Tracking/status for an order" },
+    { "name": "list_returns", "description": "Returns and refunds list" },
+    { "name": "initiate_return", "description": "Start a return/refund request" },
+    { "name": "cancel_order", "description": "Cancel an unshipped order (destructive)" },
     { "name": "get_session_status", "description": "Check auth/session state" }
   ],
   "capabilities": {

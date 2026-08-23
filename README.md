@@ -26,8 +26,8 @@
 | Layer | Description |
 |-------|-------------|
 | **Core** | `AmazonClient` — async, curl_cffi Chrome impersonation, captcha-aware |
-| **MCP Server** | 10 tools: search, product, reviews, cart, wishlist, orders |
-| **CLI** | `amazon-lyr search`, `amazon-lyr product B0…`, TOON output |
+| **MCP Server** | 17 tools: research, reviews analytics, cart, orders, returns, cancellation |
+| **CLI** | `amazon-lyr search`, `amazon-lyr product B0…`, `order`, `track`, `returns` (TOON output) |
 
 ---
 
@@ -62,20 +62,23 @@ amazon-lyr serve
 
 ---
 
-## MCP Tools (10)
+## MCP Tools (17)
 
 | Category | Tools |
 |----------|-------|
 | **Search** | `search_products` (department, price range, min-rating filters) |
 | **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
-| **Reviews** | `get_reviews` (star filter, recent/helpful sort) |
+| **Reviews** | `get_reviews`, `review_insights`, `search_in_reviews` |
 | **Cart** | `add_to_cart`, `view_cart`, `remove_from_cart` |
 | **Wishlist** | `get_wishlist` |
-| **Orders** | `get_orders` (status/date filters) |
+| **Orders** | `get_orders`, `get_order_details`, `track_shipment` |
+| **Returns** | `list_returns`, `initiate_return` (friendly reason codes) |
+| **Danger zone** | `cancel_order` — destructive, user-confirmed only |
 | **Session** | `get_session_status` |
 
-Reads work with login cookies (`at-main`). Cart/wishlist/orders also want
-`session-id` + `ubid-main` — the login flow imports whatever the browser has.
+Reads work with login cookies (`at-main`). Cart/wishlist/orders/returns/cancel
+also want `session-id` + `ubid-main` — the login flow imports whatever the
+browser has.
 
 ---
 
@@ -86,16 +89,17 @@ Reads work with login cookies (`at-main`). Cart/wishlist/orders also want
 │                     amazon_lyr                              │
 ├──────────┬──────────┬──────────────┬───────────────────────┤
 │  Auth    │  Client  │   Parsers    │   FastMCP Tools       │
-│ (cookies)│(curl_cffi│  (bs4 HTML → │   (10 tools,          │
-│ obscura/ │  chrome, │  normalized  │   readOnlyHint flags) │
-│ JSON     │  captcha │  dicts)      │                       │
+│ (cookies)│(curl_cffi│  (bs4 HTML → │   (17 tools,          │
+│ obscura/ │  chrome, │  normalized  │   readOnly/destructive│
+│ JSON     │  captcha │  dicts)      │   annotations)        │
 │          │  aware)  │              │                       │
 └──────────┴──────────┴──────────────┴───────────────────────┘
 ```
 
 Bot-wall handling is first-class: CAPTCHA pages raise `CaptchaError`,
 sign-in redirects raise `SessionExpiredError`, and both carry agent-facing
-hints via the shared error handler.
+hints via the shared error handler. Silent soft-throttles are flagged via
+`possibly_throttled` so agents retry instead of trusting empty grids.
 
 ---
 
@@ -104,12 +108,17 @@ hints via the shared error handler.
 ```
 1. search_products("noise cancelling headphones", max_price=300, min_rating=4)
 2. compare_products(["ASIN1", "ASIN2", "ASIN3"])
-3. get_reviews("ASIN2", filter_by_star="critical")   # read the 1-3★ complaints
-4. add_to_cart("ASIN2", quantity=1)
-5. get_orders()                                       # confirm it landed later
+3. review_insights("ASIN2")                            # star spread + keyword themes
+4. search_in_reviews("ASIN2", query="broke")           # what breaks?
+5. add_to_cart("ASIN2", quantity=1)
+6. get_orders()                                        # later: did it land?
+7. get_order_details("111-2223334-5556667")            # totals + invoice
+8. initiate_return("111-2223334-5556667", reason="defective", asin_hint="ASIN2")
+9. list_returns()                                      # confirm refund status
 ```
 
-Checkout stays human — no auto-buy by design.
+Checkout stays human — no auto-buy by design, and `cancel_order` /
+`initiate_return` move real money, so agents must confirm with the user first.
 
 ---
 

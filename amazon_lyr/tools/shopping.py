@@ -1,5 +1,3 @@
-from typing import Literal
-
 from fastmcp import FastMCP
 
 from amazon_lyr.authentication import validate_write_session
@@ -10,8 +8,8 @@ from amazon_lyr.error_handler import handle_api_error
 def _require_write_session() -> None:
     if not validate_write_session():
         raise RuntimeError(
-            "Cart/wishlist writes need full session cookies (at-main + session-id/ubid-main). "
-            "Run `amazon-lyr --login` to re-import cookies from your browser."
+            "Writes need full session cookies (at-main + session-id/ubid-main). "
+            "Run `amazon-lyr login` to re-import cookies from your browser."
         )
 
 
@@ -61,12 +59,10 @@ def register_wishlist_tools(mcp: FastMCP) -> None:
 def register_order_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations={"readOnlyHint": True})
     async def get_orders(
-        status_filter: Literal[
-            "last30", "months-3", "months-6", "year-2026", "year-2025", "pending", "shipped"
-        ]
-        | None = None,
+        status_filter: str | None = None,
     ) -> dict:
-        """List your orders with status and totals. status_filter narrows the window."""
+        """List order history with statuses and totals. status_filter examples:
+        last30, months-3, months-6, year-2026, year-2025, pending, shipped."""
         try:
             _require_write_session()
             client = get_amazon_client()

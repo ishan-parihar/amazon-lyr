@@ -19,11 +19,18 @@ EXPECTED_TOOLS = {
     "get_product",
     "compare_products",
     "get_reviews",
+    "review_insights",
+    "search_in_reviews",
     "add_to_cart",
     "view_cart",
     "remove_from_cart",
     "get_wishlist",
     "get_orders",
+    "get_order_details",
+    "track_shipment",
+    "list_returns",
+    "initiate_return",
+    "cancel_order",
     "get_session_status",
 }
 
@@ -61,7 +68,7 @@ async def test_search_without_cookies_returns_login_hint(isolated_config):
 
         with pytest.raises(ToolError) as e:
             await client.call_tool("search_products", {"query": "laptop"})
-        assert "--login" in str(e.value)
+        assert "amazon-lyr login" in str(e.value)
 
 
 async def test_cart_write_gated_without_context_cookies(isolated_config):
@@ -72,7 +79,40 @@ async def test_cart_write_gated_without_context_cookies(isolated_config):
 
         with pytest.raises(ToolError) as e:
             await client.call_tool("add_to_cart", {"asin": "B0TEST", "quantity": 1})
-        assert "--login" in str(e.value)
+        assert "amazon-lyr login" in str(e.value)
+
+
+async def test_money_movements_gated_behind_full_session(isolated_config):
+    """Returns and cancellations move real money — must never run without
+    full session cookies, even with a valid at-main."""
+    save_cookies({"at-main": "t"})
+    async with Client(create_mcp_server()) as client:
+        from fastmcp.exceptions import ToolError
+
+        for tool, args in (
+            ("initiate_return", {"order_id": "111-2223334-5556667"}),
+            ("cancel_order", {"order_id": "111-2223334-5556667"}),
+        ):
+            with pytest.raises(ToolError) as e:
+                await client.call_tool(tool, args)
+            assert "amazon-lyr login" in str(e.value), f"{tool} was not gated"
+
+
+async def test_destructive_tools_annotated(isolated_config):
+    async with Client(create_mcp_server()) as client:
+        tools = {t.name: t for t in await client.list_tools()}
+
+        def hint(name, key):
+            ann = tools[name].annotations
+            val = getattr(ann, key, None)
+            return ann.get(key) if val is None and isinstance(ann, dict) else val
+
+        # Cancelling destroys the order state — destructive.
+        assert bool(hint("cancel_order", "destructiveHint"))
+        # A return *creates* something; it's non-destructive but irreversible-ish.
+        assert not hint("initiate_return", "destructiveHint")
+        assert not hint("initiate_return", "readOnlyHint")
+        assert hint("initiate_return", "idempotentHint") is False
 
 
 async def test_view_cart_happy_path_through_protocol(isolated_config, monkeypatch):

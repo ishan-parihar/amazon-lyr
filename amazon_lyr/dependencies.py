@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from amazon_lyr.exceptions import AuthenticationError
 from amazon_lyr.scraping.api_client import AmazonClient
 from amazon_lyr.session_state import load_cookies
@@ -15,10 +17,11 @@ def get_amazon_client() -> AmazonClient:
         cookies = load_cookies()
         if not any(c in cookies for c in ("at-main",)):
             raise AuthenticationError(
-                "No Amazon login cookies found. Run `amazon-lyr --login` first "
+                "No Amazon login cookies found. Run `amazon-lyr login` first "
                 "(or set the AMAZON_COOKIES env var with your session JSON)."
             )
-        _client = AmazonClient(cookies=cookies)
+        marketplace = os.getenv("AMAZON_MARKETPLACE")
+        _client = AmazonClient(cookies=cookies, marketplace=marketplace)
     return _client
 
 

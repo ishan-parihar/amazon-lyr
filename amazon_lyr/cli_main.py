@@ -70,6 +70,14 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("orders", help="List orders", parents=[common])
 
+    p_order = sub.add_parser("order", help="Full details for one order", parents=[common])
+    p_order.add_argument("order_id", help="e.g. 123-1234567-1234567")
+
+    p_track = sub.add_parser("track", help="Tracking/status for one order", parents=[common])
+    p_track.add_argument("order_id")
+
+    sub.add_parser("returns", help="List returns and refunds", parents=[common])
+
     parser.add_argument("--json", action="store_true", help="JSON output for data commands")
     parser.add_argument("--version", action="store_true", help="Print version")
 

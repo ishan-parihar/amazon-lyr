@@ -193,6 +193,12 @@ async def run_command(args) -> None:  # noqa: ANN001, C901 - flat dispatch is fi
             data = await client.add_to_cart(args.asin, quantity=args.quantity)
         elif cmd == "orders":
             data = await client.get_orders(None)
+        elif cmd == "order":
+            data = await client.get_order_details(args.order_id)
+        elif cmd == "track":
+            data = await client.track_shipment(args.order_id)
+        elif cmd == "returns":
+            data = await client.list_returns()
         else:
             parser_error = f"Unknown command {cmd!r}"
             axi_error(parser_error, hint="Run `amazon-lyr --help`.")

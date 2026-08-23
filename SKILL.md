@@ -38,20 +38,19 @@ amazon-lyr serve --transport streamable-http --port 8000
 }
 ```
 
-## Tools (10)
+## Tools (17)
 
-| Tool | Description |
+| Category | Tools |
 |------|-------------|
-| `search_products` | Search with department/price/rating filters |
-| `get_product` | Full details by ASIN (price, rating, features, specs) |
-| `compare_products` | Compare up to 5 ASINs side-by-side |
-| `get_reviews` | Reviews with star filter + sort (recent/helpful) |
-| `add_to_cart` | Add an item (needs full session) |
-| `view_cart` | Cart contents + per-item delete keys |
-| `remove_from_cart` | Remove item by key |
-| `get_wishlist` | List wishlist items |
-| `get_orders` | Order history with status filters |
-| `get_session_status` | Check auth state (none/degraded/reads_only/full) |
+| **Search** | `search_products` (department/price/rating filters) |
+| **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
+| **Reviews** | `get_reviews`, `review_insights` (star distribution, verified %, keyword themes incl. critical reviews), `search_in_reviews` (keyword scan across pages) |
+| **Cart** | `add_to_cart`, `view_cart`, `remove_from_cart` (needs full session) |
+| **Wishlist** | `get_wishlist` |
+| **Orders** | `get_orders`, `get_order_details` (items/totals/payment/invoice), `track_shipment` |
+| **Returns** | `list_returns`, `initiate_return` (reason codes like `defective`, `wrong-item`) |
+| **Danger zone** | `cancel_order` — destructive; confirm with the user first |
+| **Session** | `get_session_status` |
 
 ## Authentication
 
@@ -66,10 +65,16 @@ amazon-lyr login --cookies-file cookies.json
 amazon-lyr status
 ```
 
-Reads need at-main; cart/wishlist/orders also need session-id + ubid-main.
+Reads need at-main; cart/wishlist/orders/returns/cancel also need
+session-id + ubid-main.
 
 ## Notes
 
 - Amazon serves CAPTCHAs aggressively. On `CaptchaError`, wait a few minutes
   or refresh the session in your browser, then re-import cookies.
+- Rapid successive calls get silent empty grids — responses carry
+  `possibly_throttled: true` when that's suspected; back off and retry.
+- The return wizard may demand an extra confirmation step; when it does,
+  `initiate_return` reports `in_progress` with a manual fallback URL.
+  Always verify outcomes with `list_returns`.
 - No auto-checkout by design — purchases stay human-approved.

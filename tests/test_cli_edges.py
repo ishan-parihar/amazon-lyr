@@ -47,7 +47,7 @@ def test_product_command_without_cookies_hints_login(isolated_config, capsys):
     with pytest.raises(SystemExit) as e:
         cli_main(["product", "B08N5WRWNW"])
     assert e.value.code == 2
-    assert "--login" in capsys.readouterr().out
+    assert "amazon-lyr login" in capsys.readouterr().out
 
 
 def test_home_view_full_auth_suggests_search(isolated_config, monkeypatch, capsys):

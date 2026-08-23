@@ -11,6 +11,8 @@ from decimal import Decimal, InvalidOperation
 
 from bs4 import BeautifulSoup, Tag
 
+from amazon_lyr.exceptions import ParseError
+
 _PRICE_RE = re.compile(r"[\d,]+\.?\d*")
 _ORDER_ID_RE = re.compile(r"\d{3}-\d{7}-\d{7}")
 _THUMB_RE = re.compile(r"\._.*?_\.")  # matches ._AC_UY218_. etc. (multi-segment)
@@ -373,4 +375,224 @@ def parse_wishlist(html: str) -> dict:
         "item_count": len(items),
         "items": items,
         "note": None if signed_in else "Wishlist may be empty or require sign-in cookies.",
+    }
+
+
+# ── order details / tracking / returns ───────────────────────────────────
+
+
+def _form_fields(form: Tag) -> dict[str, str]:
+    """Collect all hidden inputs of a form for POST replay."""
+    fields: dict[str, str] = {}
+    for inp in form.select('input[type="hidden"]'):
+        name = inp.get("name")
+        if name:
+            fields[str(name)] = str(inp.get("value", ""))
+    return fields
+
+
+def parse_order_details(html: str, order_id: str | None = None) -> dict:
+    soup = _soup(html)
+    text_blob = soup.get_text(" ", strip=True)
+    oid_match = _ORDER_ID_RE.search(text_blob)
+    resolved_id = order_id or (oid_match.group(0) if oid_match else None)
+
+    items: list[dict] = []
+    for block in soup.select(".yo-item-block, #orderDetails .a-fixed-left-grid"):
+        name = _text(block.select_one(".yohtmlc-product-title, .a-link-normal"))
+        price_text = _text(block.select_one(".a-color-price, .yohtmlc-item-price"))
+        qty_match = re.search(r"Qty:\s*(\d+)", block.get_text(" ", strip=True))
+        items.append(
+            {
+                "name": name,
+                "price": price_text,
+                "price_value": _parse_price(price_text),
+                "quantity": int(qty_match.group(1)) if qty_match else None,
+            }
+        )
+
+    totals: dict[str, float] = {}
+    for row in soup.select(".od-subtotals tr, #orderTotals tr"):
+        label = _text(row.select_one("td:first-child"))
+        value_text = _text(row.select_one("td:last-child"))
+        if label and value_text:
+            val = _parse_price(value_text)
+            if val is not None:
+                totals[label.strip().rstrip(":")] = val
+
+    payment = _text(soup.select_one("#payment-method, [data-test-id='payment-method']"))
+    address = _text(soup.select_one("#shipToAddressId, .displayAddressDL, #primaryShipToAddr"))
+    status = _text(
+        soup.select_one("[data-test-id='order-status'], .order-status, .delivery-box__status-text")
+    )
+
+    tracking: list[dict] = []
+    for el in soup.select("[data-testid='tracking-number'], .tracking-number a"):
+        num = _text(el)
+        if num:
+            tracking.append({"number": num.strip()})
+
+    invoice_link = None
+    inv = soup.select_one("a[href*='invoice'], a[href*='/gp/aw/invoice']")
+    if inv:
+        href = str(inv.get("href", ""))
+        invoice_link = href if href.startswith("http") else f"https://www.amazon.com{href}"
+
+    cancel_url = None
+    for a in soup.select("a[href*='cancel']"):
+        label = (_text(a) or "").lower()
+        if "cancel" in label and a.get("href"):
+            href = str(a.get("href", ""))
+            cancel_url = href if href.startswith("http") else f"https://www.amazon.com{href}"
+            break
+
+    return {
+        "order_id": resolved_id,
+        "status": status,
+        "items": items,
+        "totals": totals or None,
+        "payment_method": payment,
+        "ship_to": address,
+        "tracking_numbers": tracking or None,
+        "invoice_url": invoice_link,
+        "cancel_url": cancel_url,
+    }
+
+
+def parse_returns(html: str) -> dict:
+    soup = _soup(html)
+    returns_list: list[dict] = []
+    for card in soup.select(".return-item, .a-box.return-card, div[data-test-id='return-card']"):
+        blob = card.get_text(" ", strip=True)
+        oid = _ORDER_ID_RE.search(blob)
+        amount = re.search(r"(?:₹|\$|INR\s?)[0-9][0-9,\u00a0.]*", blob)
+        status = None
+        for marker in (
+            "Refund issued",
+            "Refund processed",
+            "Return received",
+            "Replacement sent",
+            "Return started",
+            "Picked up",
+        ):
+            if marker.lower() in blob.lower():
+                status = marker
+                break
+        returns_list.append(
+            {
+                "order_id": oid.group(0) if oid else None,
+                "item_name": _text(card.select_one(".yohtmlc-product-title, .a-link-normal")),
+                "status": status,
+                "refund_amount": amount.group(0).replace("\u00a0", " ") if amount else None,
+            }
+        )
+    return {"count": len(returns_list), "returns": returns_list}
+
+
+def parse_return_form(html: str) -> dict:
+    """Extract the pieces needed to drive Amazon's multi-step return wizard."""
+    soup = _soup(html)
+    form = soup.select_one("form[method='post'], form[action*='orc']")
+    if form is None:
+        raise ParseError(
+            "Could not find the return-selection form — Amazon's return flow may have "
+            "changed or this order may not be eligible. Check it manually at "
+            "https://www.amazon.com/returns/orders"
+        )
+
+    items: list[dict] = []
+    for box in form.select('input[type="checkbox"], input[type="radio"]'):
+        name = box.get("name")
+        if not name:
+            continue
+        parent = box.find_parent("div") or box.find_parent("li") or box
+        label = _text(parent.select_one(".a-label-bold, label")) if parent else None
+        items.append({"field": str(name), "value": str(box.get("value", "")), "label": label})
+
+    select = form.select_one("select[name*='reason'], select")
+    reasons: list[dict] = []
+    if select is not None:
+        for opt in select.select("option"):
+            reasons.append({"value": str(opt.get("value", "")), "label": _text(opt)})
+
+    return {
+        "action": str(form.get("action", "")),
+        "fields": _form_fields(form),
+        "items": items,
+        "reason_field": str(select.get("name")) if select is not None else None,
+        "reason_options": reasons,
+    }
+
+
+def parse_cancel_form(html: str) -> dict:
+    """Extract what's needed to submit an item-cancellation."""
+    soup = _soup(html)
+    form = soup.select_one("form[method='post']")
+    if form is None:
+        raise ParseError("Could not find the cancellation form.")
+    checks = [
+        {"field": str(b.get("name")), "value": str(b.get("value", ""))}
+        for b in form.select('input[type="checkbox"], input[type="radio"]')
+        if b.get("name")
+    ]
+    return {
+        "action": str(form.get("action", "")),
+        "fields": _form_fields(form),
+        "item_checkboxes": checks,
+        "confirmation_text": _text(soup.select_one(".a-box-inner h1, h2")),
+    }
+
+
+# ── review research ──────────────────────────────────────────────────────
+
+_STOPWORDS = frozenset(
+    "the a an and or but for with this that these those have has had was were is are been be "
+    "to of in on at by from as it its i my me we our you your he she they them their not no yes "
+    "very just so too also than then when what which who how why can could will would should "
+    "out up down over under again more most other some such only own same about after before "
+    "there here all any both each few if into through during while get got one two really".split()
+)
+
+
+def build_review_insights(reviews: list[dict]) -> dict:
+    """Aggregate parsed reviews into research-ready stats (pure function)."""
+    total = len(reviews)
+    if total == 0:
+        return {
+            "total": 0,
+            "average_rating": None,
+            "star_distribution": None,
+            "verified_percent": None,
+            "top_keywords": [],
+            "critical_keywords": [],
+        }
+
+    ratings = [r["rating"] for r in reviews if isinstance(r.get("rating"), (int, float))]
+    distribution: dict[str, int] = {}
+    for rev in reviews:
+        star = rev.get("rating")
+        if isinstance(star, (int, float)):
+            key = f"{int(star)}star"
+            distribution[key] = distribution.get(key, 0) + 1
+
+    verified = sum(1 for rev in reviews if rev.get("verified_purchase"))
+
+    def keywords(subset: list[dict], top_n: int = 12) -> list[dict]:
+        counts: dict[str, int] = {}
+        for rev in subset:
+            text = f"{rev.get('title') or ''} {rev.get('body') or ''}".lower()
+            for word in re.findall(r"[a-z][a-z'-]{2,}", text):
+                if word not in _STOPWORDS:
+                    counts[word] = counts.get(word, 0) + 1
+        return [{"word": w, "count": c} for w, c in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
+
+    critical = [rev for rev in reviews if isinstance(rev.get("rating"), (int, float)) and rev["rating"] <= 3]
+
+    return {
+        "total": total,
+        "average_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
+        "star_distribution": distribution or None,
+        "verified_percent": round(verified * 100 / total),
+        "top_keywords": keywords(reviews),
+        "critical_keywords": keywords(critical),
     }

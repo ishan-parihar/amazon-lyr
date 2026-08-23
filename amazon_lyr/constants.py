@@ -2,16 +2,35 @@
 
 from __future__ import annotations
 
-DEFAULT_MARKETPLACE = "https://www.amazon.com"
+import os
+
+DEFAULT_MARKETPLACE = os.getenv("AMAZON_MARKETPLACE", "https://www.amazon.com")
 
 SEARCH_PATH = "/s"
 PRODUCT_PATH = "/dp"
 REVIEWS_PATH = "/product-reviews"
 ORDERS_PATH = "/gp/your-orders/orders"
+ORDER_DETAILS_PATH = "/gp/your-account/order-details"
+RETURNS_PATH = "/returns/orders"
+RETURN_START_PATH = "/gp/orc/return/start"
 CART_ADD_PATH = "/gp/aws/cart/add.html"
 CART_VIEW_PATH = "/gp/cart/view.html"
 WISHLIST_PATH = "/hz/wishlist/ls"
 SIGNIN_MARKER = "/ap/signin"
+
+# Friendly names → Amazon return-reason codes (pass-through for unknown codes).
+RETURN_REASONS = {
+    "no-longer-needed": "NO_LONGER_NEED",
+    "defective": "DEFECTIVE_ITEM",
+    "damaged": "ITEM_DAMAGED",
+    "wrong-item": "WRONG_ITEM_SENT",
+    "missing-parts": "MISSING_PARTS",
+    "better-price": "BETTER_PRICE",
+    "not-as-described": "NOT_AS_DESCRIBED",
+    "arrived-too-late": "ARRIVED_TOO_LATE",
+    "size-fit-issue": "SIZE_OR_FIT_ISSUE",
+    "accidental-order": "ORDERED_BY_MISTAKE",
+}
 
 # Captcha page markers (Amazon bot-wall responses).
 CAPTCHA_MARKERS = (
