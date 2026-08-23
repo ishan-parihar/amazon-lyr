@@ -91,6 +91,18 @@
     {
       "name": "get_session_status",
       "description": "Check auth/session state"
+    },
+    {
+      "name": "add_to_wishlist",
+      "description": "Add an ASIN to your default wishlist"
+    },
+    {
+      "name": "checkout_preview",
+      "description": "Walk checkout WITHOUT buying; review summary"
+    },
+    {
+      "name": "place_order",
+      "description": "Place the order (requires confirm='PLACE_ORDER')"
     }
   ],
   "capabilities": {

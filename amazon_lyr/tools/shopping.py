@@ -66,6 +66,17 @@ def register_wishlist_tools(mcp: FastMCP) -> None:
         except Exception as e:
             handle_api_error(e)
 
+    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
+    async def add_to_wishlist(asin: str) -> dict:
+        """Add a product to your default wishlist (idempotent — re-adding an
+        existing item is harmless). Needs full session cookies."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.add_to_wishlist(asin)
+        except Exception as e:
+            handle_api_error(e)
+
 
 def register_order_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations={"readOnlyHint": True})

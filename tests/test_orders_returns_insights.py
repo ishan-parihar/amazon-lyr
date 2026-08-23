@@ -117,6 +117,7 @@ def test_parse_cancel_form_and_missing_form():
 
 # ── review insights (pure function) ──────────────────────────────────────
 
+
 def _rev(rating, body, verified=True):
     return {"id": "R", "rating": rating, "title": "", "body": body, "verified_purchase": verified}
 

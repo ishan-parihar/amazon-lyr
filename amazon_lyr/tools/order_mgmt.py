@@ -56,7 +56,9 @@ def register_order_mgmt_tools(mcp: FastMCP) -> None:
         except Exception as e:
             handle_api_error(e)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False})
+    @mcp.tool(
+        annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False}
+    )
     async def initiate_return(
         order_id: str,
         reason: RETURN_REASON = "no-longer-needed",
@@ -81,5 +83,46 @@ def register_order_mgmt_tools(mcp: FastMCP) -> None:
             _require_write_session()
             client = get_amazon_client()
             return await client.cancel_order(order_id)
+        except Exception as e:
+            handle_api_error(e)
+
+    @mcp.tool(annotations={"readOnlyHint": True})
+    async def checkout_preview() -> dict:
+        """Walk the cart through checkout WITHOUT buying: returns the review-step
+        summary (totals, preselected address/payment, verification flags). Show
+        this to the user before calling place_order."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.checkout_preview()
+        except Exception as e:
+            handle_api_error(e)
+
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        }
+    )
+    async def place_order(
+        confirm: Literal["PLACE_ORDER"],
+        address_id: str | None = None,
+        payment_id: str | None = None,
+    ) -> dict:
+        """PLACE THE ORDER and charge the default payment method.
+
+        HARD REQUIREMENT: confirm must be the exact literal "PLACE_ORDER" —
+        only pass it after the user has explicitly approved this purchase and
+        you have shown them checkout_preview. address_id/payment_id optionally
+        override preselected choices (values come from checkout_preview).
+        If Amazon demands card verification, status='needs_verification' comes
+        back with manual instructions; verify afterwards via get_orders.
+        """
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.place_order(confirm, address_id=address_id, payment_id=payment_id)
         except Exception as e:
             handle_api_error(e)

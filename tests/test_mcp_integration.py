@@ -32,6 +32,9 @@ EXPECTED_TOOLS = {
     "list_returns",
     "initiate_return",
     "cancel_order",
+    "checkout_preview",
+    "place_order",
+    "add_to_wishlist",
     "get_session_status",
 }
 
@@ -84,8 +87,8 @@ async def test_cart_write_gated_without_context_cookies(isolated_config):
 
 
 async def test_money_movements_gated_behind_full_session(isolated_config):
-    """Returns and cancellations move real money — must never run without
-    full session cookies, even with a valid at-main."""
+    """Returns, cancellations, checkout: must never run without full session
+    cookies, even with a valid at-main."""
     save_cookies({"at-main": "t"})
     async with Client(create_mcp_server()) as client:
         from fastmcp.exceptions import ToolError
@@ -93,10 +96,25 @@ async def test_money_movements_gated_behind_full_session(isolated_config):
         for tool, args in (
             ("initiate_return", {"order_id": "111-2223334-5556667"}),
             ("cancel_order", {"order_id": "111-2223334-5556667"}),
+            ("checkout_preview", {}),
+            ("place_order", {"confirm": "PLACE_ORDER"}),
+            ("add_to_wishlist", {"asin": "B0X1234567"}),
         ):
             with pytest.raises(ToolError) as e:
                 await client.call_tool(tool, args)
             assert "amazon-lyr login" in str(e.value), f"{tool} was not gated"
+
+
+async def test_place_order_rejects_wrong_confirm_even_with_full_session(isolated_config):
+    """The literal confirm string is the last line of defense against an agent
+    placing orders without explicit user approval."""
+    save_cookies({"at-main": "t", "session-id": "s", "ubid-main": "u"})
+    async with Client(create_mcp_server()) as client:
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises(ToolError) as e:
+            await client.call_tool("place_order", {"confirm": "yes"})
+        assert "PLACE_ORDER" in str(e.value)
 
 
 async def test_destructive_tools_annotated(isolated_config):
@@ -166,7 +184,9 @@ async def test_add_to_cart_clamped_through_protocol(isolated_config, monkeypatch
 
     try:
         async with Client(create_mcp_server()) as mcp_client:
-            result = await mcp_client.call_tool("add_to_cart", {"asin": "B0CLAMP001", "quantity": 999})
+            result = await mcp_client.call_tool(
+                "add_to_cart", {"asin": "B0CLAMP001", "quantity": 999}
+            )
             assert result.data["requested"]["quantity"] == 30
             assert captured["data"]["quantity.1"] == "30"
     finally:

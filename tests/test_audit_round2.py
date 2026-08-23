@@ -1,6 +1,5 @@
 """Audit round 2: validation, cart quantity updates, detection edge cases."""
 
-
 import pytest
 from conftest import FakeResponse, FakeSession, session_getter
 
@@ -19,6 +18,7 @@ def _client(monkeypatch, responses):
 
 
 # ── ASIN validation ──────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("bad", ["", "abc", "B08N5WRWN", "B08N5WRWNWX", "has space!!"])
 async def test_invalid_asin_rejected_with_format_hint(monkeypatch, bad):
@@ -93,6 +93,7 @@ async def test_update_cart_quantity_uncertain_when_not_applied(monkeypatch):
 
 # ── signin detection depth ───────────────────────────────────────────────
 
+
 async def test_signin_form_deep_in_page_detected(monkeypatch):
     # Login form beyond the first 5000 chars must still be caught.
     filler = "<!-- pad -->" * 1000
@@ -120,6 +121,7 @@ def test_list_returns_no_false_positive_on_marketing_text():
 
 # ── error handler friendliness ───────────────────────────────────────────
 
+
 def test_valueerror_wrapped_without_unexpected_prefix():
     with pytest.raises(RuntimeError) as e:
         handle_api_error(ValueError("query must not be empty"))
@@ -127,6 +129,7 @@ def test_valueerror_wrapped_without_unexpected_prefix():
 
 
 # ── review pagination cap ────────────────────────────────────────────────
+
 
 async def test_fetch_all_reviews_caps_pages_at_ten(monkeypatch):
     reviews_html = """
@@ -142,7 +145,13 @@ async def test_fetch_all_reviews_caps_pages_at_ten(monkeypatch):
 def test_insights_handles_malformed_rating_types():
     reviews = [
         {"id": "R1", "rating": None, "title": "x", "body": None, "verified_purchase": False},
-        {"id": "R2", "rating": "five", "title": None, "body": "words here", "verified_purchase": True},
+        {
+            "id": "R2",
+            "rating": "five",
+            "title": None,
+            "body": "words here",
+            "verified_purchase": True,
+        },
         {"id": "R3"},
     ]
     ins = build_review_insights(reviews)
@@ -152,6 +161,7 @@ def test_insights_handles_malformed_rating_types():
 
 
 # ── CLI write gate ───────────────────────────────────────────────────────
+
 
 def test_cli_cart_add_gated_without_context_cookies(isolated_config, monkeypatch, capsys):
     monkeypatch.setenv("AMAZON_COOKIES", '{"at-main": "t"}')  # reads-only session
@@ -163,6 +173,7 @@ def test_cli_cart_add_gated_without_context_cookies(isolated_config, monkeypatch
 
 
 # ── packaging sanity ─────────────────────────────────────────────────────
+
 
 def test_version_single_sourced_from_metadata():
     import tomllib

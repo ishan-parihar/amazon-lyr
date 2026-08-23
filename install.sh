@@ -4,10 +4,16 @@ set -euo pipefail
 # ─── amazon-lyr installer ────────────────────────────────────────────────
 # curl -sSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash
 #
-# Installs amazon-lyr globally using uv (preferred) or pip/pipx as fallback.
+# Production install path (family convention: reddit-lyr / threads-lyr):
+#   1. uv tool install  — isolated CLI on PATH, upgrades via `uv tool upgrade`
+#   2. pipx             — fallback when only pipx exists
+#   3. pip --user       — last resort
+# Zero-install alternative (no persistence):
+#   uvx --from git+https://github.com/ishan-parihar/amazon-lyr amazon-lyr --version
 # ──────────────────────────────────────────────────────────────────────────
 
 REPO="https://github.com/ishan-parihar/amazon-lyr.git"
+PKG_SPEC="git+${REPO}"
 BIN="amazon-lyr"
 MIN_PYTHON_VERSION="3.11"
 
@@ -33,23 +39,56 @@ check_python() {
     info "Found Python: $($py --version)"
 }
 
+install_uv() {
+    step "Installing uv…"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+}
+
 install_with_uv() {
-    step "Installing with uv (isolated tool environment)…"
-    if ! command -v uv &>/dev/null; then
-        warn "uv not found — installing…"
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-    uv tool install --force "git+${REPO}"
+    step "Installing with uv tool (isolated environment)…"
+    command -v uv &>/dev/null || install_uv
+    command -v uv &>/dev/null || return 1
+    uv tool install --force "${PKG_SPEC}"
+}
+
+install_with_pipx() {
+    command -v pipx &>/dev/null || return 1
+    step "Installing with pipx…"
+    pipx install --force "${PKG_SPEC}"
 }
 
 install_with_pip() {
     step "Falling back to pip --user install…"
-    python3 -m pip install --user --upgrade "git+${REPO}" || {
+    python3 -m pip install --user --upgrade "${PKG_SPEC}" || {
         err "pip install failed."
         exit 1
     }
     warn "Ensure ~/.local/bin is on your PATH to use ${BIN}."
+}
+
+verify_install() {
+    if command -v "${BIN}" &>/dev/null; then
+        echo ""
+        info "✔ ${BIN} installed at $(command -v "${BIN}") ($(${BIN} --version))"
+        cat <<EOF
+
+  Get started:
+    ${BIN}                          # home view + next steps
+    ${BIN} login --browser chrome   # import cookies (one-time)
+    ${BIN} serve                    # start the MCP server
+
+  MCP config:
+    {"mcpServers": {"amazon": {"command": "${BIN}", "args": ["serve"]}}}
+
+  Upgrade later:  uv tool upgrade amazon-lyr
+  Zero-install:   uvx --from ${PKG_SPEC} ${BIN} --help
+EOF
+        echo ""
+    else
+        err "'${BIN}' not found on PATH after install. Open a new shell and run: ${BIN} --version"
+        exit 1
+    fi
 }
 
 main() {
@@ -61,26 +100,8 @@ main() {
         warn "Existing installation found at $(command -v "${BIN}") — upgrading."
     fi
 
-    if command -v pipx &>/dev/null && [[ -z "${FORCE_UV:-}" ]]; then
-        step "Installing with pipx…"
-        pipx install --force "git+${REPO}" || install_with_uv || install_with_pip
-    else
-        install_with_uv || install_with_pip
-    fi
-
-    echo ""
-    if command -v "${BIN}" &>/dev/null; then
-        info "✔ ${BIN} installed: $(command -v "${BIN}")"
-        echo ""
-        echo "  Get started:"
-        echo "    ${BIN}                          # home view"
-        echo "    ${BIN} login --browser chrome   # import cookies (one-time)"
-        echo "    ${BIN} serve                    # start MCP server"
-        echo ""
-    else
-        err "Installation finished but '${BIN}' is not on PATH. Open a new shell and retry."
-        exit 1
-    fi
+    install_with_uv || install_with_pipx || install_with_pip
+    verify_install
 }
 
 main "$@"

@@ -26,7 +26,7 @@
 | Layer | Description |
 |-------|-------------|
 | **Core** | `AmazonClient` — async, curl_cffi Chrome impersonation, captcha-aware |
-| **MCP Server** | 18 tools: research, review analytics, cart+qty, orders, returns, cancellation |
+| **MCP Server** | 21 tools: research, review analytics, cart+qty, wishlist, orders, returns, checkout |
 | **CLI** | `search`, `product`, `reviews`, `cart`, `cart-add`, `orders`, `order`, `track`, `returns` (TOON output) |
 
 ---
@@ -34,11 +34,16 @@
 ## Quick start
 
 ```bash
-# Install (or: uv sync --extra dev)
+# Persistent install — uv tool (isolated; script bootstraps uv on clean systems)
 curl -sSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash
+# …or directly:
+uv tool install git+https://github.com/ishan-parihar/amazon-lyr
+
+# Zero-install run without persistence:
+uvx --from git+https://github.com/ishan-parihar/amazon-lyr amazon-lyr --version
 
 # Auth: import cookies from your browser (one-time)
-amazon-lyr login --browser chrome        # needs: uv sync --extra obscura
+amazon-lyr login --browser chrome        # needs the obscura extra
 amazon-lyr login --cookies-file cookies.json   # or explicit JSON export
 
 # Research from the shell
@@ -62,7 +67,7 @@ amazon-lyr serve
 
 ---
 
-## MCP Tools (18)
+## MCP Tools (21)
 
 | Category | Tools |
 |----------|-------|
@@ -70,10 +75,11 @@ amazon-lyr serve
 | **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
 | **Reviews** | `get_reviews`, `review_insights`, `search_in_reviews` |
 | **Cart** | `add_to_cart`, `view_cart`, `update_cart_quantity`, `remove_from_cart` |
-| **Wishlist** | `get_wishlist` |
+| **Wishlist** | `get_wishlist`, `add_to_wishlist` |
 | **Orders** | `get_orders`, `get_order_details`, `track_shipment` |
 | **Returns** | `list_returns`, `initiate_return` (friendly reason codes) |
-| **Danger zone** | `cancel_order` — destructive, user-confirmed only |
+| **Buying** | `checkout_preview`, `place_order` (confirm='PLACE_ORDER' required) |
+| **Danger zone** | `cancel_order`, `place_order` — charges money; user-confirmed only |
 | **Session** | `get_session_status` |
 
 Reads work with login cookies (`at-main`). Cart/wishlist/orders/returns/cancel
@@ -89,7 +95,7 @@ browser has.
 │                     amazon_lyr                              │
 ├──────────┬──────────┬──────────────┬───────────────────────┤
 │  Auth    │  Client  │   Parsers    │   FastMCP Tools       │
-│ (cookies)│(curl_cffi│  (bs4 HTML → │   (18 tools,          │
+│ (cookies)│(curl_cffi│  (bs4 HTML → │   (21 tools,          │
 │ obscura/ │  chrome, │  normalized  │   readOnly/destructive│
 │ JSON     │  captcha │  dicts)      │   annotations)        │
 │          │  aware)  │              │                       │

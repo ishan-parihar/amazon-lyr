@@ -33,10 +33,13 @@ def create_mcp_server() -> FastMCP:
         instructions=(
             "Amazon research & shopping via browser cookies. Research: search_products, "
             "get_product, get_reviews, review_insights, search_in_reviews, compare_products. "
-            "Shopping: add_to_cart/view_cart/remove_from_cart. Orders: get_orders, "
-            "get_order_details, track_shipment, list_returns; mutating initiate_return and "
-            "cancel_order require full session cookies (`amazon-lyr --login`) and move real "
-            "money — confirm with the user before calling them."
+            "Shopping: add_to_cart/view_cart/update_cart_quantity/remove_from_cart, "
+            "add_to_wishlist/get_wishlist. Orders: get_orders, get_order_details, "
+            "track_shipment, list_returns; initiate_return and cancel_order mutate real "
+            "money state. BUYING: checkout_preview shows the review-step summary; "
+            "place_order charges the default payment method and REQUIRES the exact "
+            "confirm='PLACE_ORDER' literal — only pass it after the user explicitly "
+            "approved the purchase you previewed for them."
         ),
         lifespan=_lifespan,
     )

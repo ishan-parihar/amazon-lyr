@@ -40,6 +40,7 @@ def _client(monkeypatch, responses):
 
 # ── order id validation ──────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("bad", ["", "abc", "111-222-333", "111-2223334"])
 async def test_order_details_rejects_malformed_ids(monkeypatch, bad):
     client, _ = _client(monkeypatch, FakeResponse("<html></html>"))
@@ -49,12 +50,15 @@ async def test_order_details_rejects_malformed_ids(monkeypatch, bad):
 
 # ── tracking ─────────────────────────────────────────────────────────────
 
+
 async def test_track_shipment_extracts_from_details_page(monkeypatch):
     client, fake = _client(monkeypatch, [FakeResponse(ORDER_DETAILS_HTML)])
     result = await client.track_shipment(ORDER_ID)
     assert result["tracking_numbers"][0]["number"] == "TBA123456789"
     call = fake.calls[0]
-    assert "order-details" in str(call["url"]) or str(call["url"]).endswith("/gp/your-account/order-details")
+    assert "order-details" in str(call["url"]) or str(call["url"]).endswith(
+        "/gp/your-account/order-details"
+    )
     assert (call["params"] or {}).get("orderID") == ORDER_ID
     assert result["note"] is None
 
@@ -68,6 +72,7 @@ async def test_track_unshipped_order_reports_note(monkeypatch):
 
 
 # ── returns ──────────────────────────────────────────────────────────────
+
 
 async def test_initiate_return_happy_path(monkeypatch):
     confirm_html = "<html><body>Your return is started. Refund summary below.</body></html>"
@@ -133,6 +138,7 @@ async def test_list_returns_real_signin_form_detected(monkeypatch):
 
 # ── cancellation ─────────────────────────────────────────────────────────
 
+
 async def test_cancel_order_two_step_flow(monkeypatch):
     confirmed = "<html><body>Your order has been cancelled.</body></html>"
     client, fake = _client(
@@ -152,13 +158,16 @@ async def test_cancel_order_two_step_flow(monkeypatch):
 
 
 async def test_cancel_order_without_cancel_option(monkeypatch):
-    shipped = ORDER_DETAILS_HTML.replace("/gp/cancel-your-orders?orderID=111-2223334-5556667", "/help")
+    shipped = ORDER_DETAILS_HTML.replace(
+        "/gp/cancel-your-orders?orderID=111-2223334-5556667", "/help"
+    )
     client, _ = _client(monkeypatch, [FakeResponse(shipped)])
     with pytest.raises(AmazonError, match="before they ship"):
         await client.cancel_order(ORDER_ID)
 
 
 # ── review research ──────────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def _no_throttle(monkeypatch):

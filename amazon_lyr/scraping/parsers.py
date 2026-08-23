@@ -596,9 +596,14 @@ def build_review_insights(reviews: list[dict]) -> dict:
             for word in re.findall(r"[a-z][a-z'-]{2,}", text):
                 if word not in _STOPWORDS:
                     counts[word] = counts.get(word, 0) + 1
-        return [{"word": w, "count": c} for w, c in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top_n]]
+        return [
+            {"word": w, "count": c}
+            for w, c in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+        ]
 
-    critical = [rev for rev in reviews if isinstance(rev.get("rating"), (int, float)) and rev["rating"] <= 3]
+    critical = [
+        rev for rev in reviews if isinstance(rev.get("rating"), (int, float)) and rev["rating"] <= 3
+    ]
 
     return {
         "total": total,
@@ -607,4 +612,108 @@ def build_review_insights(reviews: list[dict]) -> dict:
         "verified_percent": round(verified * 100 / total),
         "top_keywords": keywords(reviews),
         "critical_keywords": keywords(critical),
+    }
+
+
+# ── checkout workflow ────────────────────────────────────────────────────
+
+
+def parse_checkout_form(html: str) -> dict:
+    """Walk one step of Amazon's checkout workflow.
+
+    Returns the form to submit (action + hidden tokens), the selectable
+    choices (radio groups / selects with labels), any visible totals, and
+    whether this page looks like a final review step.
+    """
+    soup = _soup(html)
+    form = (
+        soup.select_one("form[action*='address']")
+        or soup.select_one("form[action*='shipoption']")
+        or soup.select_one("form[action*='pay']")
+        or soup.select_one("form[action*='review']")
+        or soup.select_one("form[method='post']")
+    )
+    if form is None:
+        raise ParseError(
+            "Could not find a checkout form — the flow may have changed, or the cart "
+            "is empty. Check https://www.amazon.com/gp/cart/view.html"
+        )
+
+    choices: list[dict] = []
+    for box in form.select('input[type="radio"]'):
+        name = box.get("name")
+        if not name:
+            continue
+        parent = box.find_parent("div") or box.find_parent("li") or box
+        label = (
+            _text(parent.select_one("label, .a-label-bold, span.a-declarative")) if parent else None
+        )
+        checked = "checked" in (box.attrs or {})
+        choices.append(
+            {
+                "kind": "radio",
+                "field": str(name),
+                "value": str(box.get("value", "")),
+                "label": label,
+                "preselected": bool(checked),
+            }
+        )
+
+    selects: list[dict] = []
+    for sel in form.select("select"):
+        options = [
+            {"value": str(o.get("value", "")), "label": _text(o)} for o in sel.select("option")
+        ]
+        selects.append(
+            {
+                "field": str(sel.get("name")),
+                "options": options,
+                "preselected": next(
+                    (o["value"] for o in options if "selected" in (o.get("_attrs") or {})), None
+                ),
+            }
+        )
+
+    totals_text = _text(soup.select_one(".grand-total-price, #order-summary .a-row:last-child"))
+
+    return {
+        "action": str(form.get("action", "")),
+        "fields": _form_fields(form),
+        "choices": choices,
+        "selects": selects,
+        "submit_buttons": [
+            {"name": str(b.get("name")), "value": str(b.get("value", ""))}
+            for b in form.select('input[type="submit"], button[type="submit"]')
+            if b.get("name")
+        ],
+        "totals": totals_text,
+        "page_markers": {
+            "address": soup.select_one("#ship-to-addressId, [data-test-id='address']") is not None
+            or "shipping address" in html.lower()[:20000]
+            or "/checkout/address" in str(form.get("action", "")).lower(),
+            "payment": "payment method" in html.lower()[:20000]
+            or "/checkout/pay/" in str(form.get("action", "")).lower(),
+            "review": "review your order" in html.lower()[:20000]
+            or "/place-order" in str(form.get("action", "")).lower()
+            or soup.select_one("[data-test-id='order-summary']") is not None,
+        },
+    }
+
+
+def parse_order_confirmation(html: str) -> dict | None:
+    """Detect an order-confirmation page; return summary if found."""
+    low = html.lower()
+    if not any(
+        marker in low for marker in ("order placed", "your order is confirmed", "thank you")
+    ):
+        return None
+    oid_match = _ORDER_ID_RE.search(html)
+    soup = _soup(html)
+    total = _text(soup.select_one(".grand-total-price, [data-test-id='grand-total']"))
+    delivery = _text(soup.select_one(".delivery-date, [data-test-id='delivery-date']"))
+    return {
+        "placed": True,
+        "order_id": oid_match.group(0) if oid_match else None,
+        "total": total,
+        "estimated_delivery": delivery,
     }

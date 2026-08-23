@@ -9,7 +9,6 @@ import pytest
 
 from amazon_lyr.authentication import get_auth_status, validate_session, validate_write_session
 from amazon_lyr.cookie_import import import_from_browser
-from amazon_lyr.exceptions import AmazonError
 from amazon_lyr.session_state import clear_cookies, get_cookies_path, load_cookies, save_cookies
 
 # ── load_cookies precedence + validation ─────────────────────────────────
@@ -114,11 +113,3 @@ def test_browser_import_success_filters_empty(monkeypatch):
     fake.BrowserCookieExtractor = FakeExtractor
     monkeypatch.setitem(sys.modules, "obscura_core", fake)
     assert import_from_browser("chrome") == {"at-main": "keep"}
-
-
-async def test_add_to_wishlist_is_documented_unsupported():
-    from amazon_lyr.scraping.api_client import AmazonClient
-
-    client = AmazonClient(cookies={"at-main": "t"})
-    with pytest.raises(AmazonError, match="add_to_cart"):
-        await client.add_to_wishlist("B0X")

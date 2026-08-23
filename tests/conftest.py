@@ -26,6 +26,7 @@ def _reset_client_singleton():
 
 # ── HTTP transport fakes ─────────────────────────────────────────────────
 
+
 class FakeResponse:
     def __init__(self, text="", status_code=200, url="https://www.amazon.com/s?k=x"):
         self.text = text
@@ -57,6 +58,7 @@ class FakeSession:
 
 def attach_session(client, session):
     """Point an existing client at a fake session."""
+
     async def _get():
         return session
 

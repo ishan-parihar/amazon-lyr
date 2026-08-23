@@ -11,7 +11,13 @@ def register_review_tools(mcp: FastMCP) -> None:
     async def get_reviews(
         asin: str,
         filter_by_star: Literal[
-            "five_stars", "four_stars", "three_stars", "two_stars", "one_star", "positive", "critical"
+            "five_stars",
+            "four_stars",
+            "three_stars",
+            "two_stars",
+            "one_star",
+            "positive",
+            "critical",
         ]
         | None = None,
         sort_by: Literal["recent", "helpful"] = "helpful",
@@ -20,7 +26,9 @@ def register_review_tools(mcp: FastMCP) -> None:
         """Get customer reviews for a product with star filtering and sort options."""
         try:
             client = get_amazon_client()
-            return await client.get_reviews(asin, filter_by_star=filter_by_star, sort_by=sort_by, page=page)
+            return await client.get_reviews(
+                asin, filter_by_star=filter_by_star, sort_by=sort_by, page=page
+            )
         except Exception as e:
             handle_api_error(e)
 

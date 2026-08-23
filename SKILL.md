@@ -38,7 +38,7 @@ amazon-lyr serve --transport streamable-http --port 8000
 }
 ```
 
-## Tools (18)
+## Tools (21)
 
 | Category | Tools |
 |------|-------------|
@@ -46,10 +46,11 @@ amazon-lyr serve --transport streamable-http --port 8000
 | **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
 | **Reviews** | `get_reviews`, `review_insights` (star distribution, verified %, keyword themes incl. critical reviews), `search_in_reviews` (keyword scan across pages) |
 | **Cart** | `add_to_cart`, `view_cart`, `update_cart_quantity`, `remove_from_cart` (need full session) |
-| **Wishlist** | `get_wishlist` |
+| **Wishlist** | `get_wishlist`, `add_to_wishlist` (idempotent) |
 | **Orders** | `get_orders`, `get_order_details` (items/totals/payment/invoice), `track_shipment` |
 | **Returns** | `list_returns`, `initiate_return` (reason codes like `defective`, `wrong-item`) |
-| **Danger zone** | `cancel_order` — destructive; confirm with the user first |
+| **Buying** | `checkout_preview` (safe walk-through), `place_order` — REQUIRES confirm='PLACE_ORDER' after explicit user approval |
+| **Danger zone** | `cancel_order`, `place_order` — destructive/charges money; always confirm with the user first |
 | **Session** | `get_session_status` |
 
 ## Authentication

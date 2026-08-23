@@ -14,6 +14,8 @@ from amazon_lyr.constants import (
     ACCEPT_LANGUAGE,
     CART_ADD_PATH,
     CART_VIEW_PATH,
+    CHECKOUT_START_PATH,
+    CHECKOUT_VERIFICATION_MARKERS,
     DEFAULT_MARKETPLACE,
     DEFAULT_USER_AGENT,
     MAX_RETRIES,
@@ -29,6 +31,7 @@ from amazon_lyr.constants import (
     REVIEWS_PATH,
     SEARCH_PATH,
     SIGNIN_MARKER,
+    WISHLIST_ADD_PATH,
     WISHLIST_PATH,
 )
 from amazon_lyr.exceptions import (
@@ -45,6 +48,8 @@ from amazon_lyr.scraping.parsers import (
     build_review_insights,
     parse_cancel_form,
     parse_cart,
+    parse_checkout_form,
+    parse_order_confirmation,
     parse_order_details,
     parse_orders,
     parse_product,
@@ -259,10 +264,170 @@ class AmazonClient:
         }
 
     async def add_to_wishlist(self, asin: str) -> dict:
-        raise AmazonError(
-            "add_to_wishlist is not reliably supported via scraping "
-            "(registry endpoints require per-session tokens). Use add_to_cart instead."
+        """Add an ASIN to the default wishlist via the /hz/wishlist/lsadd flow.
+
+        Best-effort by design: needs a CSRF token discovered from the wishlist
+        page; raises ParseError with manual guidance when Amazon withholds it.
+        """
+        asin = _validate_asin(asin)
+        ls_html = await self.get_html(WISHLIST_PATH, params={"asin": asin})
+        token = self._extract_csrf_token(ls_html)
+
+        data = {"asin": asin, "csrfToken": token, "ref_": "lyr_add"}
+        resp_html = await self.post_form(
+            WISHLIST_ADD_PATH, data=data, referer=self._base + WISHLIST_PATH
         )
+        low = resp_html.lower()
+        if any(m in low for m in ("added to your list", "item added", "added to wishlist")):
+            return {"status": "ok", "asin": asin}
+        # Verify by membership — some variants return sparse responses.
+        wish = await self.get_wishlist()
+        if any(i.get("asin") == asin for i in wish.get("items", [])):
+            return {"status": "ok", "asin": asin, "verified_by": "wishlist_scan"}
+        raise ParseError(
+            f"Could not confirm {asin} was added to the wishlist. Verify manually at "
+            f"{self._base}/hz/wishlist/ls — the list-add flow may have changed."
+        )
+
+    @staticmethod
+    def _extract_csrf_token(html: str) -> str:
+        """CSRF tokens appear as hidden inputs or embedded JSON on wishlist pages."""
+        soup = BeautifulSoup(html, "html.parser")
+        node = soup.select_one('input[name="anti-csrftoken-a2z"], input[name="csrfToken"]')
+        if node and node.get("value"):
+            return str(node["value"])
+        match = re.search(r'"csrfToken"\s*:\s*"([^"]{16,})"', html) or re.search(
+            r'anti-csrftoken-a2z(?:%3A|=|%3D|["\s:=]+)([A-Za-z0-9+/_-]{32,})', html
+        )
+        if match:
+            return match.group(1)
+        raise ParseError(
+            "No CSRF token found on the wishlist page — sign-in cookies may be stale "
+            "(re-run `amazon-lyr login`) or the page layout changed."
+        )
+
+    # ── checkout & ordering ──────────────────────────────────────────────
+
+    async def _initiate_checkout(self) -> str:
+        """Proceed from cart into the checkout workflow; returns first step HTML."""
+        cart = await self.view_cart()
+        if cart.get("empty") or not cart.get("items"):
+            raise AmazonError("Cart is empty — add items with add_to_cart first.")
+        return await self.post_form(
+            CART_VIEW_PATH,
+            data={"submit.checkout": "Proceed to checkout"},
+            referer=self._base + CART_VIEW_PATH,
+        )
+
+    async def checkout_preview(self) -> dict:
+        """Walk the checkout workflow WITHOUT placing anything; stop at the final
+        review step and summarize what an order would look like."""
+        html = await self._initiate_checkout()
+        for _ in range(8):
+            step = parse_checkout_form(html)
+            confirmation = parse_order_confirmation(html)
+            if confirmation:
+                raise ParseError("Unexpected order confirmation during preview — aborting.")
+            is_review = step["page_markers"].get("review")
+            if is_review and not step["submit_buttons"]:
+                break
+            if is_review:
+                break  # final review reached; do NOT submit further during preview
+            # Continue with defaults (no selections overridden).
+            data = {**step["fields"]}
+            for choice in step["choices"]:
+                if choice["preselected"]:
+                    data[choice["field"]] = choice["value"]
+            for sel in step["selects"]:
+                pre = next((o["value"] for o in sel["options"] if o["value"]), None)
+                if pre:
+                    data[sel["field"]] = pre
+            if step["submit_buttons"]:
+                btn = step["submit_buttons"][0]
+                data[btn["name"]] = btn["value"]
+            html = await self.post_form(
+                step["action"] or CHECKOUT_START_PATH,
+                data=data,
+                referer=self._base + CART_VIEW_PATH,
+            )
+        step = parse_checkout_form(html)
+        items = await self.view_cart()
+        verification = [m for m in CHECKOUT_VERIFICATION_MARKERS if m in html.lower()]
+        return {
+            "stage": "review",
+            "totals": step.get("totals"),
+            "choices": [c for c in step["choices"] if c["preselected"]] or None,
+            "cart_items": len(items.get("items", [])),
+            "verification_required_markers": verification or None,
+            "note": "Preview only — nothing was ordered. Use place_order to actually buy.",
+        }
+
+    async def place_order(
+        self, confirm: str, address_id: str | None = None, payment_id: str | None = None
+    ) -> dict:
+        """Complete checkout and place the order. Requires confirm='PLACE_ORDER'
+        (exact literal) so this can never fire accidentally."""
+        from amazon_lyr.constants import CHECKOUT_CONFIRM_LITERAL
+
+        if confirm != CHECKOUT_CONFIRM_LITERAL:
+            raise AmazonError(
+                f"Refusing to place an order: pass confirm='{CHECKOUT_CONFIRM_LITERAL}' "
+                "(exact string) after the user has explicitly approved the purchase. "
+                "Run checkout_preview first and show the user the totals."
+            )
+        html = await self._initiate_checkout()
+        placed: dict | None = None
+        for _ in range(10):
+            confirmation = parse_order_confirmation(html)
+            if confirmation:
+                placed = confirmation
+                break
+            low = html.lower()
+            if any(m in low for m in CHECKOUT_VERIFICATION_MARKERS):
+                return {
+                    "status": "needs_verification",
+                    "note": "Amazon demanded card verification (OTP/3-D Secure). Finish "
+                    "in the browser at https://www.amazon.com/gp/cart/view.html then "
+                    "check get_orders.",
+                }
+            step = parse_checkout_form(html)
+            data = {**step["fields"]}
+            overrides = {
+                "address": address_id,
+                "payment": payment_id,
+            }
+            for choice in step["choices"]:
+                field_kind = next((k for k in overrides if k in choice["field"].lower()), None)
+                wanted = overrides.get(field_kind) if field_kind else None
+                if wanted and str(choice["value"]) == wanted:
+                    data[choice["field"]] = choice["value"]
+                elif choice["preselected"]:
+                    data[choice["field"]] = choice["value"]
+            for sel in step["selects"]:
+                pre = next((o["value"] for o in sel["options"] if o["value"]), None)
+                if pre:
+                    data[sel["field"]] = pre
+            if step["submit_buttons"]:
+                btn = step["submit_buttons"][0]
+                data[btn["name"]] = btn["value"]
+            html = await self.post_form(
+                step["action"] or CHECKOUT_START_PATH,
+                data=data,
+                referer=self._base + CART_VIEW_PATH,
+            )
+        else:
+            raise ParseError(
+                "Checkout workflow did not reach a confirmation within 10 steps. "
+                "Nothing appears to have been ordered — verify at "
+                "https://www.amazon.com/gp/your-orders/orders before retrying."
+            )
+        result = {"status": "placed", **placed}
+        if not placed.get("order_id"):
+            result["note"] = (
+                "Order appears placed but no confirmation number was parsed. "
+                "Verify with get_orders."
+            )
+        return result
 
     # ── order management ─────────────────────────────────────────────────
 
@@ -294,7 +459,9 @@ class AmazonClient:
         # so a plain empty result here is just an empty returns list.
         return parsed
 
-    async def initiate_return(self, order_id: str, asin: str | None = None, reason: str = "no-longer-needed") -> dict:
+    async def initiate_return(
+        self, order_id: str, asin: str | None = None, reason: str = "no-longer-needed"
+    ) -> dict:
         """Drive Amazon's multi-step return wizard as far as scraping allows.
 
         Best-effort by design: Amazon rotates wizard tokens aggressively. Every
@@ -348,14 +515,18 @@ class AmazonClient:
 
         # Step 3 heuristic: confirmation pages mention refund/return summary.
         blob = confirm_html.lower()
-        submitted = any(m in blob for m in ("your return is started", "refund", "print label", "return summary"))
+        submitted = any(
+            m in blob for m in ("your return is started", "refund", "print label", "return summary")
+        )
         return {
             "status": "submitted" if submitted else "in_progress",
             "order_id": oid,
             "item": chosen["label"],
             "reason": reason,
             "reason_submitted": data.get(reason_field) if reason_field else None,
-            "next_step": None if submitted else (
+            "next_step": None
+            if submitted
+            else (
                 "Amazon required an extra confirmation step this session. Finish at "
                 "https://www.amazon.com/returns/orders — then verify with list_returns."
             ),
@@ -387,7 +558,9 @@ class AmazonClient:
         return {
             "status": "cancelled" if cancelled else "uncertain",
             "order_id": order_id,
-            "note": None if cancelled else (
+            "note": None
+            if cancelled
+            else (
                 "Cancellation may need one more confirmation step — verify with "
                 "get_orders before assuming failure."
             ),
@@ -425,7 +598,8 @@ class AmazonClient:
             raise ValueError("query must not be empty")
         reviews = await self.fetch_all_reviews(asin, max_pages=max_pages)
         hits = [
-            r for r in reviews
+            r
+            for r in reviews
             if query_lower in (r.get("title") or "").lower()
             or query_lower in (r.get("body") or "").lower()
         ]

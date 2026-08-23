@@ -24,6 +24,9 @@ EXPECTED_TOOLS = {
     "list_returns",
     "initiate_return",
     "cancel_order",
+    "checkout_preview",
+    "place_order",
+    "add_to_wishlist",
     "get_session_status",
 }
 
