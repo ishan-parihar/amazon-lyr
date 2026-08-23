@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.4",
+  "name": "amazon-mcp-server",
+  "display_name": "Amazon MCP Server",
+  "version": "0.1.0",
+  "description": "Amazon research & shopping MCP server using browser cookies — search, product details, reviews, cart, orders",
+  "long_description": "# Amazon MCP Server\n\nSearch Amazon, research products and reviews, manage the cart and track orders through your own logged-in browser session. No PA-API keys required.\n\n## Quick start\n\n1. Install: `install.sh` (or `uv sync`)\n2. Login: `amazon-lyr login --browser chrome`\n3. Start the MCP server: `amazon-lyr serve`\n",
+  "author": {
+    "name": "Ishan Parihar",
+    "url": "https://github.com/ishan-parihar"
+  },
+  "homepage": "https://github.com/ishan-parihar/amazon-lyr",
+  "documentation": "https://github.com/ishan-parihar/amazon-lyr#readme",
+  "license": "MIT",
+  "keywords": [
+    "amazon",
+    "shopping",
+    "mcp",
+    "scraping",
+    "price-research"
+  ],
+  "tools": [
+    { "name": "search_products", "description": "Search Amazon products with filters" },
+    { "name": "get_product", "description": "Full product details by ASIN" },
+    { "name": "compare_products", "description": "Compare up to 5 ASINs side-by-side" },
+    { "name": "get_reviews", "description": "Customer reviews with star filters" },
+    { "name": "add_to_cart", "description": "Add an item to the cart" },
+    { "name": "view_cart", "description": "View cart contents" },
+    { "name": "remove_from_cart", "description": "Remove a cart item" },
+    { "name": "get_wishlist", "description": "List wishlist items" },
+    { "name": "get_orders", "description": "Order history with statuses" },
+    { "name": "get_session_status", "description": "Check auth/session state" }
+  ],
+  "capabilities": {
+    "tools": {
+      "listChanged": false
+    }
+  },
+  "transport": "stdio"
+}

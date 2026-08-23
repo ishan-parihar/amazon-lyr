@@ -1,0 +1,83 @@
+project:
+  name: "amazon-lyr"
+  type: "python-mcp-and-clis"
+
+structure:
+  canonical:
+    - path: "tests"
+      purpose: "Test files"
+    - path: "dist"
+      purpose: "Build output"
+
+rules:
+  root:
+    forbidden_files:
+      - "*.log"
+      - "*.bak"
+      - "*.tmp"
+      - "*.old"
+      - "*.orig"
+      - "*.rej"
+      - "*.swp"
+      - "*.pid"
+      - "*.out"
+      - "*.err"
+      - "*~"
+      - "AUDIT*"
+      - "PLAN*"
+      - "*REPORT*"
+      - "*_v[0-9]*"
+      - "*ROADMAP*"
+      - "*GUIDE*"
+      - "*UPGRADE*"
+      - "*DIAGNOSTICS*"
+      - "*INTELLIGENCE*"
+      - "TOOL_ANALYSIS*"
+      - "IMPLEMENTATION_*"
+      - "AGENT_GUIDE*"
+      - "error.log"
+      - "cookies.json"
+    allowed_root_files:
+      - ".editorconfig"
+      - ".env.example"
+      - ".gitattributes"
+      - ".gitignore"
+      - ".python-version"
+      - ".prettierrc*"
+      - "AGENTS.md"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "CONTRIBUTING.md"
+      - "COPYING"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "Justfile"
+      - "LICENSE"
+      - "Makefile"
+      - "NOTICE"
+      - "README.md"
+      - "SECURITY.md"
+      - "SKILL.md"
+      - "VERSION"
+      - "install.sh"
+      - "manifest.json"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "workspace-lint.yaml"
+
+  files:
+    "*.md":
+      preferred_dir: "docs"
+      exclude_dirs:
+        - ".agents"
+        - ".github"
+        - "build"
+        - "dist"
+        - "docs"
+        - "amazon_lyr"
+        - "tests"
+
+  directories:
+    forbidden_patterns:
+      - "^\\s"
+      - "\\s$"

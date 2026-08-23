@@ -1,0 +1,76 @@
+from typing import Literal
+
+from fastmcp import FastMCP
+
+from amazon_lyr.authentication import validate_write_session
+from amazon_lyr.dependencies import get_amazon_client
+from amazon_lyr.error_handler import handle_api_error
+
+
+def _require_write_session() -> None:
+    if not validate_write_session():
+        raise RuntimeError(
+            "Cart/wishlist writes need full session cookies (at-main + session-id/ubid-main). "
+            "Run `amazon-lyr --login` to re-import cookies from your browser."
+        )
+
+
+def register_cart_tools(mcp: FastMCP) -> None:
+    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False})
+    async def add_to_cart(asin: str, quantity: int = 1) -> dict:
+        """Add a product to the Amazon shopping cart. quantity is clamped to 1-30."""
+        try:
+            _require_write_session()
+            quantity = max(1, min(quantity, 30))
+            client = get_amazon_client()
+            return await client.add_to_cart(asin, quantity=quantity)
+        except Exception as e:
+            handle_api_error(e)
+
+    @mcp.tool(annotations={"readOnlyHint": True})
+    async def view_cart() -> dict:
+        """View the current cart contents with per-item delete keys."""
+        try:
+            client = get_amazon_client()
+            return await client.view_cart()
+        except Exception as e:
+            handle_api_error(e)
+
+    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+    async def remove_from_cart(item_key: str) -> dict:
+        """Remove a cart item using the `key` returned by view_cart items[].key."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.remove_from_cart(item_key)
+        except Exception as e:
+            handle_api_error(e)
+
+
+def register_wishlist_tools(mcp: FastMCP) -> None:
+    @mcp.tool(annotations={"readOnlyHint": True})
+    async def get_wishlist(wishlist_id: str | None = None) -> dict:
+        """List wishlist items for your account (or a shared wishlist id)."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.get_wishlist(wishlist_id)
+        except Exception as e:
+            handle_api_error(e)
+
+
+def register_order_tools(mcp: FastMCP) -> None:
+    @mcp.tool(annotations={"readOnlyHint": True})
+    async def get_orders(
+        status_filter: Literal[
+            "last30", "months-3", "months-6", "year-2026", "year-2025", "pending", "shipped"
+        ]
+        | None = None,
+    ) -> dict:
+        """List your orders with status and totals. status_filter narrows the window."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.get_orders(status_filter)
+        except Exception as e:
+            handle_api_error(e)

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-lyr"
+version = "0.1.0"
+description = "Amazon research & shopping MCP server using browser cookies and curl_cffi"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "curl_cffi>=0.7.0",
+    "beautifulsoup4>=4.12",
+    "python-dotenv>=1.1.1",
+]
+
+[project.optional-dependencies]
+obscura = ["obscura-core @ git+https://github.com/ishan-parihar/obscura-core.git"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4"]
+
+[project.scripts]
+amazon-lyr = "amazon_lyr.cli_main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["amazon_lyr*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Family convention (matches reddit-lyr / twitter-lyr / tg-cli): E/F/I/B/UP.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",   # line length handled by the formatter
+    "BLE001", # error handler deliberately catches all exceptions
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
