@@ -1,57 +1,83 @@
-<!-- T2I HERO SPEC — Subject: an Amazon shopping research engine — product cards (orange smile-arrow motif) flowing through a curl_cffi pipeline into structured JSON for agents; a CAPTCHA wall as a gate on one path. Composition: search grid → funnel → JSON output, cart icon at the end. Palette: amazon orange #ff9900 → deep navy → off-white cards. Style: dark flat vector, smile-arrow motif, no text. 16:9. -->
-
 <p align="center">
+  <img src="https://github.com/ishan-parihar/amazon-lyr/actions/workflows/ci.yml/badge.svg" alt="CI">
   <img src="https://img.shields.io/badge/python-3.11%2B-2b6cb0?style=flat&logo=python&logoColor=white" alt="Python 3.11+">
-  <img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
+  <img src="https://img.shields.io/badge/tools-21-c026d3?style=flat&logo=modelcontextprotocol&logoColor=white" alt="21 MCP tools">
   <img src="https://img.shields.io/badge/license-MIT-059669?style=flat" alt="MIT">
-  <img src="https://img.shields.io/badge/mcp-1.0-c026d3?style=flat&logo=modelcontextprotocol&logoColor=white" alt="MCP 1.0">
 </p>
 
 <h1 align="center">amazon-lyr</h1>
 
 <p align="center">
-  <strong>An Amazon research &amp; shopping MCP server for AI agents</strong> —
-  search products, dig into details and reviews, manage the cart, and track
-  orders through your own logged-in browser session. No PA-API keys.
+  <strong>The full Amazon lifecycle as MCP tools for AI agents</strong> — research
+  products and reviews, manage the cart, place orders, track shipments, start
+  returns — all through your own logged-in browser session. No PA-API keys.
 </p>
 
 <p align="center">
-  <code>curl -sSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash</code>
+  <img src="./assets/readme/hero.svg" width="100%" alt="amazon-lyr: an agent session panel showing search_products, review_insights and checkout_preview flowing into a highlighted place_order step and a green order-confirmation chip">
 </p>
 
 ---
 
-## What it is
+## An agent session, start to finish
 
-| Layer | Description |
-|-------|-------------|
-| **Core** | `AmazonClient` — async, curl_cffi Chrome impersonation, captcha-aware |
-| **MCP Server** | 21 tools: research, review analytics, cart+qty, wishlist, orders, returns, checkout |
-| **CLI** | `search`, `product`, `reviews`, `cart`, `cart-add`, `orders`, `order`, `track`, `returns` (TOON output) |
+This is one real conversation with an agent running `amazon-lyr` — no steps hidden:
 
----
+```text
+1. search_products("noise cancelling headphones", max_price=300, min_rating=4)
+2. review_insights("B0X1234567")            # star spread + keyword themes
+3. search_in_reviews("B0X1234567", query="broke")     # what actually breaks?
+4. add_to_cart("B0X1234567", quantity=1)
+5. checkout_preview()                        # totals + address + payment, nothing bought
+6. place_order(confirm="PLACE_ORDER")       # only after the user said "buy it"
+   ✓ order placed · #111-2223334-5556667
+7. track_shipment("111-2223334-5556667")
+8. initiate_return("111-2223334-5556667", reason="defective", asin_hint="…")
+9. list_returns()                           # refund status confirmed
+```
 
-## Quick start
+Every step is a typed MCP tool call. The buying step is deliberately hard to
+fire by accident — see [Safety model](#safety-model).
+
+## Why it's different
+
+| | |
+|---|---|
+| **No API keys** | Speaks Amazon's own web endpoints over `curl_cffi` with Chrome TLS impersonation — the same session your browser has |
+| **Full lifecycle** | Not just scraping: cart mutations, wishlist writes, checkout with confirmation parsing, returns wizard, cancellations |
+| **Agent-native errors** | CAPTCHAs, sign-out redirects and soft throttles surface as typed errors with recovery hints (`possibly_throttled`, manual-fallback URLs) — never silent garbage |
+
+## How it works
+
+```
+browser cookies ──▶ AmazonClient (curl_cffi, captcha-aware)
+                        │
+                        ▼
+              bs4 parsers ──▶ normalized dicts ──▶ 21 FastMCP tools
+                                                   (readOnly / destructive annotations)
+```
+
+Auth is your own session: `amazon-lyr login` imports cookies from Chrome,
+Brave, Firefox, Edge or Zen via [obscura-core](https://github.com/ishan-parihar/obscura-core),
+or from an explicit JSON export. Reads need the login token; cart, orders,
+returns and checkout also need the session context cookies.
+
+## Install
 
 ```bash
-# Persistent install — uv tool (isolated; script bootstraps uv on clean systems)
+# Persistent install — uv tool (isolated; bootstraps uv on clean systems)
 curl -sSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash
-# …or directly:
-uv tool install git+https://github.com/ishan-parihar/amazon-lyr
 
 # Zero-install run without persistence:
 uvx --from git+https://github.com/ishan-parihar/amazon-lyr amazon-lyr --version
+```
 
-# Auth: import cookies from your browser (one-time)
-amazon-lyr login --browser chrome        # needs the obscura extra
-amazon-lyr login --cookies-file cookies.json   # or explicit JSON export
+Then authenticate once and serve:
 
-# Research from the shell
-amazon-lyr search "mechanical keyboard" --json
-amazon-lyr product B08N5WRWNW
-
-# MCP server for agents
-amazon-lyr serve
+```bash
+amazon-lyr login --browser chrome            # or: --cookies-file cookies.json
+amazon-lyr search "mechanical keyboard"      # shell works immediately
+amazon-lyr serve                             # MCP server (stdio)
 ```
 
 ```json
@@ -65,78 +91,61 @@ amazon-lyr serve
 }
 ```
 
----
-
-## MCP Tools (21)
+## Tools (21)
 
 | Category | Tools |
 |----------|-------|
 | **Search** | `search_products` (department, price range, min-rating filters) |
-| **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
+| **Product** | `get_product`, `compare_products` (up to 5 ASINs) |
 | **Reviews** | `get_reviews`, `review_insights`, `search_in_reviews` |
 | **Cart** | `add_to_cart`, `view_cart`, `update_cart_quantity`, `remove_from_cart` |
-| **Wishlist** | `get_wishlist`, `add_to_wishlist` |
+| **Wishlist** | `add_to_wishlist`, `get_wishlist` |
 | **Orders** | `get_orders`, `get_order_details`, `track_shipment` |
 | **Returns** | `list_returns`, `initiate_return` (friendly reason codes) |
-| **Buying** | `checkout_preview`, `place_order` (confirm='PLACE_ORDER' required) |
-| **Danger zone** | `cancel_order`, `place_order` — charges money; user-confirmed only |
+| **Buying** | `checkout_preview`, `place_order` |
+| **Danger zone** | `cancel_order` |
 | **Session** | `get_session_status` |
 
-Reads work with login cookies (`at-main`). Cart/wishlist/orders/returns/cancel
-also want `session-id` + `ubid-main` — the login flow imports whatever the
-browser has.
+## Safety model
 
----
+Money moves through exactly two gates:
 
-## Architecture
+1. **Session gate** — every mutation requires full login cookies
+   (`at-main` + `session-id`/`ubid-main`). Reads-only sessions are refused
+   before any request is made.
+2. **Consent gate** — `place_order` refuses to run unless passed the exact
+   literal `confirm="PLACE_ORDER"`. The intended flow is:
+   preview for the user → user approves → then pass the literal.
+   `cancel_order` and `initiate_return` are similarly annotated as
+   destructive/non-idempotent so agent frameworks treat them accordingly.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     amazon_lyr                              │
-├──────────┬──────────┬──────────────┬───────────────────────┤
-│  Auth    │  Client  │   Parsers    │   FastMCP Tools       │
-│ (cookies)│(curl_cffi│  (bs4 HTML → │   (21 tools,          │
-│ obscura/ │  chrome, │  normalized  │   readOnly/destructive│
-│ JSON     │  captcha │  dicts)      │   annotations)        │
-│          │  aware)  │              │                       │
-└──────────┴──────────┴──────────────┴───────────────────────┘
-```
+Card verification (OTP / 3-D Secure) is detected mid-checkout and reported
+as `needs_verification` with browser instructions — never guessed through.
 
-Bot-wall handling is first-class: CAPTCHA pages raise `CaptchaError`,
-sign-in redirects raise `SessionExpiredError`, and both carry agent-facing
-hints via the shared error handler. Silent soft-throttles are flagged via
-`possibly_throttled` so agents retry instead of trusting empty grids.
+## Limits
 
----
+Honest ceilings, all surfaced as typed errors instead of wrong data:
 
-## Example: Agent researching a purchase
-
-```
-1. search_products("noise cancelling headphones", max_price=300, min_rating=4)
-2. compare_products(["ASIN1", "ASIN2", "ASIN3"])
-3. review_insights("ASIN2")                            # star spread + keyword themes
-4. search_in_reviews("ASIN2", query="broke")           # what breaks?
-5. add_to_cart("ASIN2", quantity=1)
-6. get_orders()                                        # later: did it land?
-7. get_order_details("111-2223334-5556667")            # totals + invoice
-8. initiate_return("111-2223334-5556667", reason="defective", asin_hint="ASIN2")
-9. list_returns()                                      # confirm refund status
-```
-
-Checkout stays human — no auto-buy by design, and `cancel_order` /
-`initiate_return` move real money, so agents must confirm with the user first.
-
----
+- **CAPTCHA walls** — account-area pages are stricter than the catalog;
+  re-import fresh cookies or wait it out (`CaptchaError` includes hints)
+- **Soft throttles** — sub-3-second cadences get silent empty grids;
+  responses carry `possibly_throttled: true` when suspected
+- **Geo price variants** — some variants render prices client-side;
+  search falls back to text-scanning, `get_product` stays authoritative
+- **No auto-buy without consent** — by design; checkout demands the explicit
+  confirm literal and user approval
 
 ## Development
 
 ```bash
+git clone https://github.com/ishan-parihar/amazon-lyr && cd amazon-lyr
 uv sync --extra dev
 uv run ruff check . && uv run pytest -q
 ```
 
-See [AGENTS.md](AGENTS.md) for architecture notes and release process.
+Architecture notes, invariants, and the release process live in
+[AGENTS.md](AGENTS.md).
 
 ## License
 
-MIT © Ishan Parihar
+MIT © [Ishan Parihar](https://github.com/ishan-parihar)

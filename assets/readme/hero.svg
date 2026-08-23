@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="100%" role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">amazon-lyr — the full Amazon lifecycle as MCP tools for AI agents</title>
+  <desc id="hero-desc">Dark banner. Left: the project name amazon-lyr with the promise "Research, buy, return — through your own browser session." Right: an agent-session panel showing tool calls search_products, review_insights and checkout_preview flowing to a highlighted place_order step and an order-confirmation chip reading order #111-2223334-5556667 placed.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10141c"/>
+      <stop offset="1" stop-color="#141b28"/>
+    </linearGradient>
+    <linearGradient id="money" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff9900"/>
+      <stop offset="1" stop-color="#ff6a00"/>
+    </linearGradient>
+    <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#ff9900"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="360" fill="url(#bg)"/>
+  <!-- faint grid: technical substrate -->
+  <g stroke="#223047" stroke-width="1" opacity="0.35">
+    <path d="M0 90 H1200 M0 180 H1200 M0 270 H1200"/>
+    <path d="M150 0 V360 M300 0 V360 M450 0 V360 M600 0 V360 M750 0 V360 M900 0 V360 M1050 0 V360"/>
+  </g>
+
+  <!-- left column: identity -->
+  <text x="72" y="92" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="18" letter-spacing="4" fill="#93a1b5">MCP SERVER · FOR AI AGENTS</text>
+  <text x="68" y="168" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="64" font-weight="800" fill="#f4f6fa">amazon-lyr</text>
+  <path d="M70 186 Q 210 208 350 182" stroke="url(#money)" stroke-width="5" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="72" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="26" fill="#c8d2e0">Research, buy, return on Amazon —</text>
+  <text x="72" y="266" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="26" fill="#c8d2e0">through your own browser session.</text>
+  <text x="72" y="308" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="19" fill="#7f8ea3">21 tools · no PA-API keys</text>
+
+  <!-- right column: agent session panel -->
+  <rect x="620" y="52" width="508" height="256" rx="14" fill="#1a2230" stroke="#2b3950" stroke-width="1.5"/>
+  <circle cx="650" cy="80" r="5" fill="#e5544b"/>
+  <circle cx="672" cy="80" r="5" fill="#e5a54b"/>
+  <circle cx="694" cy="80" r="5" fill="#3fbf6f"/>
+  <text x="720" y="85" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="17" fill="#93a1b5">agent session</text>
+
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="18">
+    <rect x="644" y="104" width="330" height="30" rx="8" fill="#232f42"/>
+    <text x="656" y="124" fill="#8fd4c6">&#8250; search_products("earbuds")</text>
+
+    <rect x="644" y="142" width="272" height="30" rx="8" fill="#232f42"/>
+    <text x="656" y="162" fill="#8fd4c6">&#8250; review_insights(asin)</text>
+
+    <rect x="644" y="180" width="240" height="30" rx="8" fill="#232f42"/>
+    <text x="656" y="200" fill="#8fd4c6">&#8250; checkout_preview()</text>
+
+    <rect x="644" y="218" width="415" height="32" rx="8" fill="#33240d" stroke="#ff9900" stroke-width="1.5"/>
+    <text x="656" y="239" fill="#ffb84d">&#8250; place_order(confirm='PLACE_ORDER')</text>
+
+    <rect x="644" y="262" width="440" height="34" rx="8" fill="#12291a" stroke="#3fbf6f" stroke-width="1.5"/>
+    <text x="658" y="284" fill="#7fe0a2">&#10003; order placed &#8226; #111-2223334-5556667</text>
+  </g>
+
+  <!-- connectors down the chain -->
+  <g stroke="#ff9900" stroke-width="2" opacity="0.85">
+    <line x1="752" y1="136" x2="752" y2="140" marker-end="url(#arrowhead)"/>
+    <line x1="752" y1="174" x2="752" y2="178" marker-end="url(#arrowhead)"/>
+    <line x1="752" y1="212" x2="752" y2="216" marker-end="url(#arrowhead)"/>
+    <line x1="752" y1="252" x2="752" y2="260" marker-end="url(#arrowhead)"/>
+  </g>
+
+  <!-- safety caption -->
+  <text x="644" y="336" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="17" fill="#7f8ea3">preview first &#183; confirm literal required</text>
+</svg>
