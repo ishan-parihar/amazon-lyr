@@ -23,5 +23,9 @@ def handle_api_error(e: Exception) -> NoReturn:
         msg = f"{e}" + (f" Hint: {hint}" if hint else "")
         logger.warning("Tool failed: %s", msg)
         raise RuntimeError(msg) from e
+    if isinstance(e, ValueError):
+        # Agent-supplied input problems are expected, not "unexpected".
+        logger.warning("Bad tool input: %s", e)
+        raise RuntimeError(str(e)) from e
     logger.exception("Unexpected tool failure")
     raise RuntimeError(f"Unexpected error: {e}") from e

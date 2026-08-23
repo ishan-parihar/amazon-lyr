@@ -24,6 +24,7 @@ EXPECTED_TOOLS = {
     "add_to_cart",
     "view_cart",
     "remove_from_cart",
+    "update_cart_quantity",
     "get_wishlist",
     "get_orders",
     "get_order_details",
@@ -165,7 +166,7 @@ async def test_add_to_cart_clamped_through_protocol(isolated_config, monkeypatch
 
     try:
         async with Client(create_mcp_server()) as mcp_client:
-            result = await mcp_client.call_tool("add_to_cart", {"asin": "B0CLAMP", "quantity": 999})
+            result = await mcp_client.call_tool("add_to_cart", {"asin": "B0CLAMP001", "quantity": 999})
             assert result.data["requested"]["quantity"] == 30
             assert captured["data"]["quantity.1"] == "30"
     finally:

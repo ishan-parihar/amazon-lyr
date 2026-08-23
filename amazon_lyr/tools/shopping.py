@@ -43,6 +43,17 @@ def register_cart_tools(mcp: FastMCP) -> None:
         except Exception as e:
             handle_api_error(e)
 
+    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False})
+    async def update_cart_quantity(qty_field: str, quantity: int) -> dict:
+        """Change a cart item's quantity (clamped 1-30). qty_field comes from
+        view_cart items[].qty_field."""
+        try:
+            _require_write_session()
+            client = get_amazon_client()
+            return await client.update_cart_quantity(qty_field, quantity)
+        except Exception as e:
+            handle_api_error(e)
+
 
 def register_wishlist_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations={"readOnlyHint": True})

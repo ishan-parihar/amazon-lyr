@@ -190,6 +190,13 @@ async def run_command(args) -> None:  # noqa: ANN001, C901 - flat dispatch is fi
         elif cmd == "cart":
             data = await client.view_cart()
         elif cmd == "cart-add":
+            from amazon_lyr.authentication import validate_write_session
+
+            if not validate_write_session():
+                axi_error(
+                    "Cart writes need full session cookies (at-main + session-id/ubid-main).",
+                    hint="Run `amazon-lyr login` to re-import cookies from your browser.",
+                )
             data = await client.add_to_cart(args.asin, quantity=args.quantity)
         elif cmd == "orders":
             data = await client.get_orders(None)

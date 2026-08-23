@@ -270,15 +270,27 @@ def parse_cart(html: str) -> dict:
         'div.sc-list-item-content, div[data-name="Active Items"] .sc-list-item'
     ):
         form_input = block.select_one('input[name^="submit.delete."]')
-        qty_input = block.select_one(
-            'input[name^="quantityBox."], select[name^="quantityBox."] option[selected]'
-        )
-        qty_raw = qty_input.get("value") if qty_input else None
+        # Quantity lives on an input OR a select; capture the field name for updates.
+        qty_select = block.select_one('select[name^="quantityBox."]')
+        qty_text_input = block.select_one('input[name^="quantityBox."]')
+        if qty_select is not None:
+            qty_field = str(qty_select.get("name"))
+            selected = qty_select.select_one("option[selected]") or qty_select.select_one(
+                'option[value]:not([value=""])'
+            )
+            qty_raw = selected.get("value") if selected else None
+        elif qty_text_input is not None:
+            qty_field = str(qty_text_input.get("name"))
+            qty_raw = qty_text_input.get("value")
+        else:
+            qty_field = None
+            qty_raw = None
         name = _text(block.select_one(".sc-product-link, h4 a, span.a-truncate-full"))
         price_text = _text(block.select_one(".sc-product-price, .sc-price"))
         items.append(
             {
                 "key": form_input.get("name") if form_input else None,
+                "qty_field": qty_field,
                 "name": name,
                 "price": price_text,
                 "price_value": _parse_price(price_text),

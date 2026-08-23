@@ -26,8 +26,8 @@
 | Layer | Description |
 |-------|-------------|
 | **Core** | `AmazonClient` — async, curl_cffi Chrome impersonation, captcha-aware |
-| **MCP Server** | 17 tools: research, reviews analytics, cart, orders, returns, cancellation |
-| **CLI** | `amazon-lyr search`, `amazon-lyr product B0…`, `order`, `track`, `returns` (TOON output) |
+| **MCP Server** | 18 tools: research, review analytics, cart+qty, orders, returns, cancellation |
+| **CLI** | `search`, `product`, `reviews`, `cart`, `cart-add`, `orders`, `order`, `track`, `returns` (TOON output) |
 
 ---
 
@@ -62,14 +62,14 @@ amazon-lyr serve
 
 ---
 
-## MCP Tools (17)
+## MCP Tools (18)
 
 | Category | Tools |
 |----------|-------|
 | **Search** | `search_products` (department, price range, min-rating filters) |
 | **Product** | `get_product` (price, rating, features, specs), `compare_products` (up to 5 ASINs) |
 | **Reviews** | `get_reviews`, `review_insights`, `search_in_reviews` |
-| **Cart** | `add_to_cart`, `view_cart`, `remove_from_cart` |
+| **Cart** | `add_to_cart`, `view_cart`, `update_cart_quantity`, `remove_from_cart` |
 | **Wishlist** | `get_wishlist` |
 | **Orders** | `get_orders`, `get_order_details`, `track_shipment` |
 | **Returns** | `list_returns`, `initiate_return` (friendly reason codes) |
@@ -89,7 +89,7 @@ browser has.
 │                     amazon_lyr                              │
 ├──────────┬──────────┬──────────────┬───────────────────────┤
 │  Auth    │  Client  │   Parsers    │   FastMCP Tools       │
-│ (cookies)│(curl_cffi│  (bs4 HTML → │   (17 tools,          │
+│ (cookies)│(curl_cffi│  (bs4 HTML → │   (18 tools,          │
 │ obscura/ │  chrome, │  normalized  │   readOnly/destructive│
 │ JSON     │  captcha │  dicts)      │   annotations)        │
 │          │  aware)  │              │                       │

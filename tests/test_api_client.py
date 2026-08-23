@@ -69,7 +69,7 @@ async def test_503_maps_to_captcha(monkeypatch):
 
     client, _ = _client_with(monkeypatch, StatusError())
     with pytest.raises(CaptchaError):
-        await client.get_product("B0X")
+        await client.get_product("B0X1234567")
 
 
 async def test_search_passes_query_params(monkeypatch):
@@ -160,7 +160,7 @@ async def test_404_raises_not_found(monkeypatch):
 
     monkeypatch.setattr(client, "_check_page", check)
     with pytest.raises(NotFoundError):
-        await client.get_product("B0MISSING")
+        await client.get_product("B0MISSING9")
 
 
 async def test_signin_via_form_action_marker(monkeypatch):
@@ -213,7 +213,7 @@ async def test_quantity_clamping_in_client(monkeypatch):
     ok = FakeResponse('<div id="sc-empty-cart"></div>')
     for raw, expected in ((100, "30"), (0, "1"), (-5, "1"), (7, "7")):
         client, fake = _client_with(monkeypatch, ok)
-        await client.add_to_cart("B0Q", quantity=raw)
+        await client.add_to_cart("B0Q1234567", quantity=raw)
         assert fake.calls[0]["data"]["quantity.1"] == expected
 
 

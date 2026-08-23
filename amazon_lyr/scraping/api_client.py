@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 from urllib.parse import urljoin
 
@@ -59,6 +60,19 @@ def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "html.parser")
 
 
+_ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
+
+
+def _validate_asin(asin: str) -> str:
+    asin = (asin or "").strip().upper()
+    if not _ASIN_RE.fullmatch(asin):
+        raise AmazonError(
+            f"{asin!r} is not a valid ASIN (10 characters, letters/digits — e.g. B08N5WRWNW). "
+            "Copy it from search_products results."
+        )
+    return asin
+
+
 class AmazonClient:
     def __init__(self, cookies: dict[str, str] | None = None, marketplace: str | None = None):
         self._cookies = cookies or {}
@@ -95,7 +109,9 @@ class AmazonClient:
             raise CaptchaError("Amazon served a CAPTCHA page")
         if "To discuss automated access to Amazon data please contact" in resp.text:
             raise CaptchaError("Amazon served an automated-access block")
-        if SIGNIN_MARKER in final_url or 'action="/ap/signin"' in resp.text[:5000]:
+        # Full-text scan (not just the head): login forms can sit deep in the
+        # page for account-area routes when the session is dead.
+        if SIGNIN_MARKER in final_url or 'action="/ap/signin"' in resp.text:
             raise SessionExpiredError("Amazon redirected to sign-in")
         if resp.status_code == 404:
             raise NotFoundError("Page not found (404)")
@@ -168,6 +184,7 @@ class AmazonClient:
         return parse_search(html, page=page)
 
     async def get_product(self, asin: str) -> dict:
+        asin = _validate_asin(asin)
         html = await self.get_html(f"{PRODUCT_PATH}/{asin}", params=None)
         return parse_product(html, asin=asin)
 
@@ -179,6 +196,7 @@ class AmazonClient:
         sort_by: str = "recent",  # recent|helpful
         page: int = 1,
     ) -> dict:
+        asin = _validate_asin(asin)
         params: dict[str, Any] = {"sortBy": sort_by, "pageNumber": str(page)}
         if filter_by_star:
             params["filterByStar"] = filter_by_star
@@ -200,6 +218,7 @@ class AmazonClient:
     # ── writes (shopping) ────────────────────────────────────────────────
 
     async def add_to_cart(self, asin: str, quantity: int = 1) -> dict:
+        asin = _validate_asin(asin)
         # Single source of truth for clamping — tools and CLI both route here.
         quantity = max(1, min(int(quantity or 1), 30))
         data = {
@@ -222,6 +241,22 @@ class AmazonClient:
         cart = parse_cart(html)
         removed = all(i.get("key") != item_key for i in cart.get("items", []))
         return {"status": "ok" if removed else "uncertain", "cart": cart}
+
+    async def update_cart_quantity(self, qty_field: str, quantity: int) -> dict:
+        """Change an item's quantity. qty_field comes from view_cart items[].qty_field."""
+        quantity = max(1, min(int(quantity or 1), 30))
+        data = {qty_field: str(quantity)}
+        html = await self.post_form(CART_VIEW_PATH, data=data)
+        cart = parse_cart(html)
+        applied = any(
+            i.get("qty_field") == qty_field and i.get("quantity") == quantity
+            for i in cart.get("items", [])
+        )
+        return {
+            "status": "ok" if applied else "uncertain",
+            "requested": {"qty_field": qty_field, "quantity": quantity},
+            "cart": cart,
+        }
 
     async def add_to_wishlist(self, asin: str) -> dict:
         raise AmazonError(
@@ -255,8 +290,8 @@ class AmazonClient:
     async def list_returns(self) -> dict:
         html = await self.get_html(RETURNS_PATH)
         parsed = parse_returns(html)
-        if parsed["count"] == 0 and "sign in" in html.lower()[:5000]:
-            raise SessionExpiredError("Returns center redirected to sign-in")
+        # Sign-out detection is centralized in _check_page (form-action marker),
+        # so a plain empty result here is just an empty returns list.
         return parsed
 
     async def initiate_return(self, order_id: str, asin: str | None = None, reason: str = "no-longer-needed") -> dict:

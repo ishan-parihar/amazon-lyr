@@ -112,9 +112,21 @@ async def test_initiate_return_extra_step_reported_not_faked(monkeypatch):
     assert "Finish at" in result["next_step"]
 
 
-async def test_list_returns_signin_redirect_detected(monkeypatch):
-    signin_html = "<html><body>Please sign in to view your returns</body></html>"
-    client, _ = _client(monkeypatch, [FakeResponse(signin_html)])
+async def test_list_returns_empty_without_false_positives(monkeypatch):
+    """Plain 'sign in' copy in a page must NOT raise — only real signin forms do
+    (centralized in _check_page). Empty returns list is a valid result."""
+    html = "<html><body><p>No returns to show. Someone should sign in somewhere.</p></body></html>"
+    client, _ = _client(monkeypatch, [FakeResponse(html)])
+    result = await client.list_returns()
+    assert result["count"] == 0
+
+
+async def test_list_returns_real_signin_form_detected(monkeypatch):
+    html = (
+        '<html><body><form action="/ap/signin" method="post">'
+        '<input name="email"></form></body></html>'
+    )
+    client, _ = _client(monkeypatch, [FakeResponse(html)])
     with pytest.raises(SessionExpiredError):
         await client.list_returns()
 
@@ -161,7 +173,7 @@ def _reviews_client(monkeypatch, pages_html):
 
 async def test_review_insights_aggregates_pages(monkeypatch):
     client, fake = _reviews_client(monkeypatch, [REVIEWS_PAGE_1, REVIEWS_PAGE_2])
-    ins = await client.review_insights("B0X", max_pages=3)
+    ins = await client.review_insights("B0X1234567", max_pages=3)
     assert ins["total"] == 2
     assert ins["verified_percent"] == 50
     words = {k["word"] for k in ins["top_keywords"]}
@@ -173,13 +185,13 @@ async def test_review_insights_aggregates_pages(monkeypatch):
 
 async def test_review_insights_dedupes_repeated_ids(monkeypatch):
     client, fake = _reviews_client(monkeypatch, [REVIEWS_PAGE_1, REVIEWS_PAGE_1])
-    ins = await client.review_insights("B0X", max_pages=5)
+    ins = await client.review_insights("B0X1234567", max_pages=5)
     assert ins["total"] == 1  # second page had identical review id
 
 
 async def test_search_in_reviews_filters_and_scores(monkeypatch):
     client, _ = _reviews_client(monkeypatch, [REVIEWS_PAGE_1, REVIEWS_PAGE_2])
-    out = await client.search_in_reviews("B0X", "battery")
+    out = await client.search_in_reviews("B0X1234567", "battery")
     assert out["matches"] == 2
     assert out["of_scanned"] == 2
     assert out["average_rating_of_matches"] == 3.0
@@ -188,4 +200,4 @@ async def test_search_in_reviews_filters_and_scores(monkeypatch):
 async def test_search_in_reviews_empty_query_rejected(monkeypatch):
     client, _ = _reviews_client(monkeypatch, [REVIEWS_PAGE_1])
     with pytest.raises(ValueError, match="query"):
-        await client.search_in_reviews("B0X", "   ")
+        await client.search_in_reviews("B0X1234567", "   ")

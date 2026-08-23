@@ -211,13 +211,13 @@ def test_cart_item_without_delete_key_or_quantity():
 
 
 def test_cart_qty_select_without_selected_option():
+    """No explicit selection → first option (Amazon's implicit default of 1)."""
     html = """
     <select name="quantityBox.Q1"><option value="1"></option><option value="2"></option></select>
     """
-    assert (
-        parse_cart(f'<div class="sc-list-item-content">{html}</div>')["items"][0]["quantity"]
-        is None
-    )
+    item = parse_cart(f'<div class="sc-list-item-content">{html}</div>')["items"][0]
+    assert item["qty_field"] == "quantityBox.Q1"
+    assert item["quantity"] == 1
 
 
 # ── orders ───────────────────────────────────────────────────────────────

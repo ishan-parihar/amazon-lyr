@@ -44,20 +44,29 @@ amazon_lyr/
 ├── constants.py       # endpoints, captcha markers, retry policy
 ├── exceptions.py, error_handler.py, ratelimit.py, logging_config.py
 ├── scraping/
-│   ├── api_client.py  # curl_cffi chrome impersonation; captcha/signin detection
-│   └── parsers.py     # HTML → normalized dicts (bs4, defensive)
+│   ├── api_client.py  # curl_cffi chrome impersonation; captcha/signin detection;
+│   │                  #   ASIN/order-id validation; return/cancel wizards
+│   └── parsers.py     # HTML → normalized dicts (bs4, defensive) + review insights
 └── tools/
-    ├── search.py, product.py, reviews.py   # reads (readOnlyHint=True)
-    ├── shopping.py                          # cart/wishlist/orders
+    ├── search.py, product.py               # reads (readOnlyHint=True)
+    ├── reviews.py                           # get_reviews / insights / keyword scan
+    ├── shopping.py                          # cart (incl. qty updates)/wishlist/get_orders
+    ├── order_mgmt.py                        # details/tracking/returns/cancellation
     └── session.py                           # auth status tool
 ```
 
 Key invariants:
 
 - `_check_page()` must raise `CaptchaError` on bot-wall markers and
-  `SessionExpiredError` on `/ap/signin` redirects — never parse those pages.
+  `SessionExpiredError` on `/ap/signin` (full-text form-action scan) — never
+  parse those pages. Sign-out detection is centralized there only.
 - Parsers are defensive: missing selectors yield None/[], never raise.
-- Writes (`cart-add`, `remove_from_cart`) gate on `validate_write_session()`.
+- All client entry points validate identifiers (`_validate_asin`,
+  order-id regex) with format hints in the error.
+- Mutations (`cart-add`, cart qty/remove, returns, cancel) gate on
+  `validate_write_session()` in BOTH the MCP tool layer and the CLI.
+- Money-moving tools (`initiate_return`, `cancel_order`) are MCP-only by
+  design — they need conversational confirmation, not shell flags.
 - Tests never hit live Amazon — fixture HTML strings or FakeSession.
 
 ## Release Process
