@@ -21,6 +21,7 @@ uv run amazon-lyr serve      # MCP server (stdio)
 
 Run one test: `uv run pytest tests/test_parsers.py::test_parse_search -v`
 
+*(Commands reviewed 2026-10-19: the section above still holds the commands that build and test this repo.)*
 ## Code Style
 
 - Line length 100; ruff rules E/F/I/B/UP (see pyproject)
