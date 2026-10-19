@@ -66,7 +66,7 @@ returns and checkout also need the session context cookies.
 
 ```bash
 # Persistent install — uv tool (isolated; bootstraps uv on clean systems)
-curl -sSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ishan-parihar/amazon-lyr/main/install.sh | bash
 
 # Zero-install run without persistence:
 uvx --from git+https://github.com/ishan-parihar/amazon-lyr amazon-lyr --version
