@@ -78,11 +78,23 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("returns", help="List returns and refunds", parents=[common])
 
+    p_update = sub.add_parser(
+        "update", aliases=["upgrade"], help="Update through the owning package manager"
+    )
+    p_update.add_argument("--check", action="store_true", help="Check without installing")
+    p_update.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="Emit JSON status"
+    )
     parser.add_argument("--json", action="store_true", help="JSON output for data commands")
     parser.add_argument("--version", action="store_true", help="Print version")
 
     args = parser.parse_args(argv)
 
+    if args.command in {"update", "upgrade"}:
+        from amazon_lyr.updater import run_update
+
+        update_args = (["--check"] if args.check else []) + (["--json"] if args.json else [])
+        raise SystemExit(run_update(update_args, application="amazon-lyr", package="amazon-lyr"))
     from amazon_lyr.cli_actions import run_command  # noqa: PLC0415
 
     asyncio.run(run_command(args))

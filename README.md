@@ -149,3 +149,7 @@ Architecture notes, invariants, and the release process live in
 ## License
 
 MIT © [Ishan Parihar](https://github.com/ishan-parihar)
+
+## Updating
+
+Use `amazon-lyr update --check` to check without changing the installation, or `amazon-lyr update` to update it. `amazon-lyr upgrade` is an alias. The command delegates to the manager that owns this installation (`uv`, `pipx`, or `pip`) and refuses editable, local-checkout, system, or unknown installs instead of replacing package-manager-owned files. For example: `uv tool upgrade amazon-lyr`.
